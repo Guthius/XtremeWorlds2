@@ -2,9 +2,9 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Server.Net;
+using XtremeWorlds.Server.Net;
 
-namespace Server.Game.Net;
+namespace XtremeWorlds.Server.Game.Net;
 
 public sealed class GameSessionManager : INetworkSessionManager<GameSession>
 {

@@ -2,10 +2,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
-using Server.Game;
-using Server.Game.Net;
-using Server.Net;
-using Server.Services;
+using XtremeWorlds.Server.Game;
+using XtremeWorlds.Server.Game.Net;
+using XtremeWorlds.Server.Net;
+using XtremeWorlds.Server.Services;
 
 // Get the directory where the executable is located
 var exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);

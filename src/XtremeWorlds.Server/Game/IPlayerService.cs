@@ -1,6 +1,6 @@
-﻿using Server.Net;
+﻿using XtremeWorlds.Server.Net;
 
-namespace Server.Game;
+namespace XtremeWorlds.Server.Game;
 
 public interface IPlayerService
 {

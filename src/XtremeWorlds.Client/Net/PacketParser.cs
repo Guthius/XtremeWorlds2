@@ -2,7 +2,7 @@
 using System.Runtime.InteropServices;
 using Serilog;
 
-namespace Client.Net;
+namespace XtremeWorlds.Client.Net;
 
 public abstract class PacketParser<TPacketId> where TPacketId : Enum
 {

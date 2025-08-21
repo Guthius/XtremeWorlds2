@@ -1,9 +1,10 @@
-﻿using Client.Game.UI;
-using Core.Configurations;
+﻿using Core.Configurations;
 using Core.Globals;
 using Core.Net;
+using XtremeWorlds.Client.Features;
+using XtremeWorlds.Client.Features.UI;
 
-namespace Client.Net;
+namespace XtremeWorlds.Client.Net;
 
 public static class Network
 {
@@ -88,5 +89,14 @@ public static class Network
     public static void Send(PacketWriter data)
     {
         Send(data.GetBytes());
+    }
+
+    public static void Send(IPacket packet)
+    {
+        var packetWriter = new PacketWriter();
+        
+        packet.Serialize(packetWriter);
+        
+        Send(packetWriter);
     }
 }

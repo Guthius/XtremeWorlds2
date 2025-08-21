@@ -1,0 +1,5 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Style Texture="Window.png">
+    <Part Name="WindowTitleBar" TextureRect="16, 0, 16, 16" NinePatchRect="2, 2, 12, 12"/>
+    <Part Name="WindowBack" TextureRect="0, 16, 16, 16" NinePatchRect="4, 4, 8, 8"/>
+</Style>

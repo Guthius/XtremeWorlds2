@@ -1,9 +1,10 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Server.Game;
+using XtremeWorlds.Server.Game;
+using Player = XtremeWorlds.Server.Game.Objects.Player;
 
-namespace Server.Services;
+namespace XtremeWorlds.Server.Services;
 
 public sealed class GameService(
     ILogger<GameService> logger,
@@ -15,15 +16,27 @@ public sealed class GameService(
     {
         General.Logger = logger;
         
-        Database.ConnectionString = configuration.GetValue<string>("Database:ConnectionString") ?? throw new InvalidOperationException("Database connection string not found in configuration");
+        Game.Database.ConnectionString = configuration.GetValue<string>("Database:ConnectionString") ?? throw new InvalidOperationException("Database connection string not found in configuration");
         
-        await General.InitServerAsync(configuration);
-
+        try
+        {
+            await General.ServerStartAsync(configuration);
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Critical server error, initiating emergency shutdown");
+            
+            await General.SendServerAnnouncementAsync("Server shutting down due to critical error.");
+            await General.DestroyServerAsync();
+        }
+        
         foreach (var player in playerService.Players)
         {
             await Player.LeftGame(player.Id);
         }
-
+        
+        logger.LogInformation("Game service has stopped");
+        
         lifetime.StopApplication();
     }
 }

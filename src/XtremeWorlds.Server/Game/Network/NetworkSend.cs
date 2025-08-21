@@ -1,13 +1,12 @@
-﻿using Core;
-using Core.Configurations;
+﻿using Core.Configurations;
 using Core.Globals;
 using Core.Net;
-using Server.Game;
-using Server.Game.Net;
+using XtremeWorlds.Server.Database;
+using XtremeWorlds.Server.Game.Net;
 using static Core.Net.Packets;
 using static Core.Globals.Command;
 
-namespace Server;
+namespace XtremeWorlds.Server.Game.Network;
 
 public static class NetworkSend
 {
@@ -28,7 +27,7 @@ public static class NetworkSend
 
         session.Channel.Send(packetWriter.GetBytes());
 
-        _ = Player.LeftGame(session.Id);
+        _ = Objects.Player.LeftGame(session.Id);
     }
 
     public static void GlobalMsg(string message)
@@ -678,7 +677,7 @@ public static class NetworkSend
     {
         try
         {
-            Script.Instance?.JoinMap(playerId);
+            Script.JoinMap(playerId);
         }
         catch (Exception ex)
         {

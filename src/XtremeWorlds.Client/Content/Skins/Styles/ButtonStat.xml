@@ -1,0 +1,7 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Style Texture="ButtonIcons.png">
+    <Part Name="ButtonNormal" TextureRect="32, 0, 16, 16"/>
+    <Part Name="ButtonHot" TextureRect="32, 16, 16, 16"/>
+    <Part Name="ButtonPressed" TextureRect="32, 32, 16, 16"/>
+    <Part Name="ButtonDisabled" TextureRect="32, 48, 16, 16"/>
+</Style>

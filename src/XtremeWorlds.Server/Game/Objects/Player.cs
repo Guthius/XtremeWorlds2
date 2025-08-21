@@ -1,30 +1,18 @@
-﻿using Core;
-using Core.Configurations;
+﻿using Core.Configurations;
 using Core.Globals;
 using Core.Net;
 using Microsoft.Extensions.Logging;
-using Server.Game;
-using Server.Game.Net;
-using Server.Net;
+using XtremeWorlds.Server.Database;
+using XtremeWorlds.Server.Game.Events;
+using XtremeWorlds.Server.Game.Net;
+using XtremeWorlds.Server.Game.Network;
 using static Core.Globals.Command;
 using static Core.Net.Packets;
 
-namespace Server;
+namespace XtremeWorlds.Server.Game.Objects;
 
 public static class Player
 {
-    public static void CheckPlayerLevelUp(int playerId)
-    {
-        try
-        {
-            Script.Instance?.CheckPlayerLevelUp(playerId);
-        }
-        catch (Exception ex)
-        {
-            General.Logger.LogError(ex, "[Script] Error in {MethodName}", nameof(CheckPlayerLevelUp));
-        }
-    }
-
     public static void HandleUseChar(GameSession session)
     {
         PlayerService.Instance.AddPlayer(session.Id, session.Channel);
@@ -44,7 +32,7 @@ public static class Player
 
     public static void SendLeaveMap(int playerId, int mapNum)
     {
-        var packet = new PacketWriter(4);
+        var packet = new PacketWriter(8);
 
         packet.WriteEnum(ServerPackets.SLeftMap);
         packet.WriteInt32(playerId);
@@ -75,7 +63,7 @@ public static class Player
         {
             try
             {
-                Script.Instance?.LeaveMap(playerId, oldMapNum);
+                Script.LeaveMap(playerId, oldMapNum);
             }
             catch (Exception ex)
             {
@@ -140,8 +128,8 @@ public static class Player
         var amount = 0;
 
         // Check for subscript out of range
-        var count = System.Enum.GetValues(typeof(MovementState)).Length;
-        var count2 = System.Enum.GetValues(typeof(Direction)).Length;
+        var count = Enum.GetValues(typeof(MovementState)).Length;
+        var count2 = Enum.GetValues(typeof(Direction)).Length;
 		if (dir < (int) Direction.Up || dir > count2 || movement < 0 || movement > count)
         {
             return;
@@ -505,7 +493,7 @@ public static class Player
         NetworkSend.SendPlayerXyToMap(playerId);
         try
         {
-            Script.Instance?.PlayerMove(playerId);
+            Script.PlayerMove(playerId);
         }
         catch (Exception ex)
         {
@@ -687,7 +675,7 @@ public static class Player
 
             try
             {
-                Script.Instance?.MapGetItem(playerId, mapNum, mapItemNum, slot);
+                Script.MapGetItem(playerId, mapNum, mapItemNum, slot);
             }
             catch (Exception ex)
             {
@@ -877,7 +865,7 @@ public static class Player
 
             try
             {
-                Script.Instance?.MapDropItem(playerId, slot, invNum, amount, mapNum, item, itemNum);
+                Script.MapDropItem(playerId, slot, invNum, amount, mapNum, item, itemNum);
             }
             catch (Exception ex)
             {
@@ -1000,7 +988,7 @@ public static class Player
 
         try
         {
-            Script.Instance?.UseItem(playerId, itemNum, invNum);
+            Script.UseItem(playerId, itemNum, invNum);
         }
         catch (Exception ex)
         {
@@ -1126,7 +1114,7 @@ public static class Player
         {
             try
             {
-                Script.Instance?.UnequipItem(playerId);
+                Script.UnEquipItem(playerId, eqSlot);
             }
             catch (Exception ex)
             {
@@ -1143,9 +1131,7 @@ public static class Player
     {
         try
         {
-            Script.Instance?.JoinGame(playerId);
-
-            General.UpdateCaption();
+            Script.JoinGame(playerId);
         }
         catch (Exception ex)
         {
@@ -1161,7 +1147,7 @@ public static class Player
         
         try
         {
-            Script.Instance?.LeftGame(playerId);
+            Script.LeftGame(playerId);
         }
         catch (Exception ex)
         {
@@ -1171,7 +1157,8 @@ public static class Player
         if (Data.TempPlayer[playerId].InGame)
         {
             await Database.SaveCharacterAsync(playerId, Data.TempPlayer[playerId].Slot);
-            await Database.SaveBankAsync(playerId);
+            
+            Database.SaveBank(playerId);
         }
         
         Database.ClearPlayer(playerId);
@@ -1179,15 +1166,13 @@ public static class Player
         PlayerService.Instance.RemovePlayer(playerId);
         
         Data.TempPlayer[playerId].InGame = false;
-        
-        General.UpdateCaption();
     }
 
     public static int KillPlayer(int playerId)
     {
         try
         {
-            return Script.Instance?.KillPlayer(playerId);
+            return Script.KillPlayer(playerId);
         }
         catch (Exception ex)
         {

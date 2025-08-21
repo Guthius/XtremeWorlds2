@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winOptions" Size="210, 212" Visible="False"
+        CanDrag="False" ShowTitlebar="False"
+        StartPosition="CenterScreen">
+
+    <PictureBox Position="6, 6" Size="198, 200" Style="Parchment"/>
+
+    <PictureBox Name="picBlank" Position="35,  25" Size="140, 10" Style="Parchment"/>
+    <Label Name="lblBlank" Text="General Options" Position="35, 22" Size="140, 0" Align="Center"/>
+
+    <CheckBox Name="chkMusic" Text="Music" Position="35, 40" Size="80, 10" Design="CheckboxNormal"/>
+    <CheckBox Name="chkSound" Text="Sound" Position="115, 40" Size="80, 10" Design="CheckboxNormal"/>
+    <CheckBox Name="chkAutotile" Text="Autotile" Position="35, 60" Size="80, 10" Design="CheckboxNormal"/>
+    <CheckBox Name="chkFullscreen" Text="Fullscreen" Position="115, 60" Size="80, 10" Design="CheckboxNormal"/>
+
+    <PictureBox Name="picBlank" Position="35,  85" Size="140, 10" Style="Parchment"/>
+    <Label Name="lblBlank" Text="Select Resolution" Position="35, 92" Size="140, 0" Align="Center"/>
+    <ComboBox Name="cmbRes" Position="30, 100" Size="150, 18"/> <!-- TODO: Implement ComboBox -->
+
+    <Button Name="btnConfirm" Text="Confirm" Position="65, 168" Size="80, 22"/>
+
+</Window>

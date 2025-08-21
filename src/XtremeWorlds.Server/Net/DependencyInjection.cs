@@ -2,7 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Server.Net;
+namespace XtremeWorlds.Server.Net;
 
 public static class DependencyInjection
 {

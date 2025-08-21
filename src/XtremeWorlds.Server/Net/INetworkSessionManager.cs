@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace Server.Net;
+namespace XtremeWorlds.Server.Net;
 
 public interface INetworkSessionManager<TSession> where TSession : IDisposable
 {

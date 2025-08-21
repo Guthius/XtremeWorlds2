@@ -16,7 +16,6 @@ public static class Data
     public static Animation[] Animation = new Animation[Constant.MaxAnimations];
     public static Map[] Map = new Map[Constant.MaxMaps];
     public static Map MyMap;
-    public static Tile[,]? TempTile;
     public static MapItem[,] MapItem = new MapItem[Constant.MaxMaps, Constant.MaxMapItems];
     public static MapItem[] MyMapItem = new MapItem[Constant.MaxMapItems];
     public static MapData[] MapNpc = new MapData[Constant.MaxMaps];
@@ -34,17 +33,9 @@ public static class Data
     public static Resource[] Resource = new Resource[Constant.MaxResources];
     public static CharacterNameList? Char;
     public static ChatBubble[] ChatBubble = new ChatBubble[byte.MaxValue];
-    public static Script Script = new();
-
-    public static Quest[] Quests = new Quest[Constant.MaxQuests];
-    public static Event[] Events = new Event[Constant.MaxEvents];
-    public static Guild[] Guilds = new Guild[Constant.MaxGuilds];
-    public static Weather Weather = new();
-
     public static ActionMsg[] ActionMsg = new ActionMsg[byte.MaxValue];
     public static Blood[] Blood = new Blood[byte.MaxValue];
     public static Chat[] Chat = new Chat[Constant.ChatLines];
-    public static Tile[,]? MapTile;
     public static TileHistory[]? TileHistory;
     public static Autotile[,]? Autotile;
     public static MapEvent[]? MapEvents;

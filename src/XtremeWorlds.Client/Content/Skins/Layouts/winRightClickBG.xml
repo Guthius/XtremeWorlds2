@@ -1,0 +1,2 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winRightClickBG" Size="2500, 2500" Style="WindowBlank" Visible="True" StartPosition="CenterScreen"/>

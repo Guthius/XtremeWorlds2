@@ -2,13 +2,12 @@
 using Core.Globals;
 using Core.Net;
 using Microsoft.Extensions.Logging;
-using Server.Game;
-using Server.Game.Net;
-using Server.Net;
+using XtremeWorlds.Server.Game.Net;
+using XtremeWorlds.Server.Game.Network;
 using static Core.Globals.Command;
 using static Core.Net.Packets;
 
-namespace Server;
+namespace XtremeWorlds.Server.Game.Objects;
 
 public static class Npc
 {
@@ -186,7 +185,7 @@ public static class Npc
 
     public static bool CanNpcMove(int mapNum, int mapNpcNum, byte dir)
     {
-        int count = System.Enum.GetValues(typeof(Direction)).Length;
+        var count = Enum.GetValues<Direction>().Length;
         if (mapNum < 0 || mapNum >= Core.Globals.Constant.MaxMaps || mapNpcNum < 0 || mapNpcNum >= Core.Globals.Constant.MaxMapNpcs || dir > count)
         {
             return false;
@@ -214,16 +213,16 @@ public static class Npc
         }
 
         // Calculate the tile the NPC would occupy after moving
-        int nextTileX = (int)Math.Floor((double)nextX / 32);
-        int nextTileY = (int)Math.Floor((double)nextY / 32);
+        var nextTileX = (int)Math.Floor((double)nextX / 32);
+        var nextTileY = (int)Math.Floor((double)nextY / 32);
 
         // Check map bounds
         if (nextTileX < 0 || nextTileY < 0 || nextTileX >= Data.Map[mapNum].MaxX || nextTileY >= Data.Map[mapNum].MaxY)
             return false;
 
         // Check tile walkability
-        int n = (int)Data.Map[mapNum].Tile[nextTileX, nextTileY].Type;
-        int n2 = (int)Data.Map[mapNum].Tile[nextTileX, nextTileY].Type2;
+        var n = (int)Data.Map[mapNum].Tile[nextTileX, nextTileY].Type;
+        var n2 = (int)Data.Map[mapNum].Tile[nextTileX, nextTileY].Type2;
         if (n != (byte)TileType.None &&
             n != (byte)TileType.Item &&
             n != (byte)TileType.NpcSpawn &&
@@ -250,8 +249,8 @@ public static class Npc
         {
             if (i == mapNpcNum) continue;
             if (Data.MapNpc[mapNum].Npc[i].Num < 0) continue;
-            int npcTileX = (int)Math.Floor((double)Data.MapNpc[mapNum].Npc[i].X / 32);
-            int npcTileY = (int)Math.Floor((double)Data.MapNpc[mapNum].Npc[i].Y / 32);
+            var npcTileX = (int)Math.Floor((double)Data.MapNpc[mapNum].Npc[i].X / 32);
+            var npcTileY = (int)Math.Floor((double)Data.MapNpc[mapNum].Npc[i].Y / 32);
             if (npcTileX == nextTileX && npcTileY == nextTileY)
             {
                 return false;
@@ -269,15 +268,15 @@ public static class Npc
 
     public static void NpcMove(int mapNum, int mapNpcNum, byte dir, int movement)
     {
-        var count = System.Enum.GetValues(typeof(MovementState)).Length;
-        int count2 = System.Enum.GetValues(typeof(Direction)).Length;
+        var count = Enum.GetValues<MovementState>().Length;
+        var count2 = Enum.GetValues<Direction>().Length;
         if (mapNum < 0 || mapNum >= Core.Globals.Constant.MaxMaps || mapNpcNum < 0 || mapNpcNum >= Core.Globals.Constant.MaxMapNpcs || dir > count2 || movement < 0 || movement > count)
         {
             return;
         }
 
-        int nextX = Data.MapNpc[mapNum].Npc[mapNpcNum].X;
-        int nextY = Data.MapNpc[mapNum].Npc[mapNpcNum].Y;
+        var nextX = Data.MapNpc[mapNum].Npc[mapNpcNum].X;
+        var nextY = Data.MapNpc[mapNum].Npc[mapNpcNum].Y;
 
         switch (dir)
         {
@@ -296,8 +295,8 @@ public static class Npc
         }
 
         // Calculate the tile the NPC would occupy after moving
-        int nextTileX = (int)Math.Floor((double)nextX / 32);
-        int nextTileY = (int)Math.Floor((double)nextY / 32);
+        var nextTileX = (int)Math.Floor((double)nextX / 32);
+        var nextTileY = (int)Math.Floor((double)nextY / 32);
 
         // Check map bounds
         if (nextTileX < 0 || nextTileY < 0 || nextTileX >= Data.Map[mapNum].MaxX || nextTileY >= Data.Map[mapNum].MaxY)
@@ -321,7 +320,7 @@ public static class Npc
 
     public static void NpcDir(int mapNum, int mapNpcNum, byte dir)
     {
-        int count = System.Enum.GetValues(typeof(Direction)).Length;
+        var count = Enum.GetValues<Direction>().Length;
         if (mapNum < 0 || mapNum >= Core.Globals.Constant.MaxMaps || mapNpcNum < 0 || mapNpcNum >= Core.Globals.Constant.MaxMapNpcs || dir > count)
         {
             return;

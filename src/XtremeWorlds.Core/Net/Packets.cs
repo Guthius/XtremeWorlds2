@@ -238,11 +238,6 @@ public static class Packets
         SMoralEditor = 102,
 
         STime = 103,
-        SClock = 104,
-
-        SScriptEditor = 105,
-
-        // Make sure COUNT is below everything else
-        Count = 106
+        SClock = 104
     }
 }

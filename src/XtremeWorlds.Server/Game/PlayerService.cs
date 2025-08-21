@@ -1,6 +1,6 @@
-﻿using Server.Net;
+﻿using XtremeWorlds.Server.Net;
 
-namespace Server.Game;
+namespace XtremeWorlds.Server.Game;
 
 public sealed class PlayerService : IPlayerService
 {
@@ -38,40 +38,12 @@ public sealed class PlayerService : IPlayerService
         return true;
     }
 
-    public void SendDataToAll(ReadOnlySpan<byte> data, int head)
-    {
-        var buffer = new byte[head + 4];
-
-        BitConverter.TryWriteBytes(buffer, head);
-
-        data.CopyTo(buffer.AsSpan(4));
-
-        SendDataToAll(buffer);
-    }
-
     public void SendDataToAll(byte[] bytes)
     {
         foreach (var player in _players)
         {
             player.Send(bytes);
         }
-    }
-
-    public void SendDataTo(int playerId, ReadOnlySpan<byte> data, int head)
-    {
-        var player = _players.FirstOrDefault(x => x.Id == playerId);
-        if (player is null)
-        {
-            return;
-        }
-
-        var buffer = new byte[head + 4];
-
-        BitConverter.TryWriteBytes(buffer, head);
-
-        data.CopyTo(buffer.AsSpan(4));
-
-        player.Send(buffer);
     }
 
     public void SendDataTo(int playerId, byte[] bytes)

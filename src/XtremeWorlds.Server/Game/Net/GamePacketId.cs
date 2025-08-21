@@ -1,4 +1,4 @@
-﻿namespace Server.Game.Net;
+﻿namespace XtremeWorlds.Server.Game.Net;
 
 public static class GamePacketId
 {
@@ -121,10 +121,7 @@ public static class GamePacketId
         CRequestMoral,
         CSaveMoral,
         CRequestEditMoral,
-
-        CSaveScript,
-        CRequestEditScript,
-
+        
         CCloseEditor
     }
 }

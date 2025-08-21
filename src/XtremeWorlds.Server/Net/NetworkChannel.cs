@@ -5,7 +5,7 @@ using System.Threading.Channels;
 using Core.Net;
 using Microsoft.Extensions.Logging;
 
-namespace Server.Net;
+namespace XtremeWorlds.Server.Net;
 
 internal sealed class NetworkChannel<TSession>(ILogger<NetworkChannel<TSession>> logger, TcpClient tcpClient) : INetworkChannel where TSession : IDisposable
 {
@@ -84,7 +84,7 @@ internal sealed class NetworkChannel<TSession>(ILogger<NetworkChannel<TSession>>
                     break;
                 }
 
-                await channelProxy.OnBytesReceivedAsync(this, bytes.AsSpan(0, bytesRead), cancellationToken);
+                await channelProxy.OnBytesReceivedAsync(this, bytes.AsMemory(0, bytesRead), cancellationToken);
             }
         }
         finally

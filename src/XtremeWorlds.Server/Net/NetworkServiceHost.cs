@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Server.Net;
+namespace XtremeWorlds.Server.Net;
 
 internal sealed class NetworkServiceHost<TSession>(
     ILogger<NetworkServiceHost<TSession>> logger,
@@ -32,7 +32,7 @@ internal sealed class NetworkServiceHost<TSession>(
             return serviceHost.OnDisconnectedAsync(session, cancellationToken);
         }
 
-        public Task OnBytesReceivedAsync(INetworkChannel channel, ReadOnlySpan<byte> bytes, CancellationToken cancellationToken)
+        public Task OnBytesReceivedAsync(INetworkChannel channel, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
         {
             logger.LogTrace("Received {NumberOfBytes} from {IpAddress}", bytes.Length, channel.IpAddress);
 
@@ -56,6 +56,8 @@ internal sealed class NetworkServiceHost<TSession>(
             {
                 var tcpClient = await tcpListener.AcceptTcpClientAsync(stoppingToken);
 
+                tcpClient.NoDelay = true;
+                
                 HandleTcpClient(tcpClient, stoppingToken);
             }
         }

@@ -1,0 +1,4 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Style Texture="Tooltip.png">
+    <Part Name="Background" TextureRect="32, 0, 38, 38" NinePatchRect="3, 3, 32, 32"/>
+</Style>

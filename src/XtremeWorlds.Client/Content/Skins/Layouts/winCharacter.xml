@@ -1,0 +1,86 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winCharacter" Caption="Character"
+        Size="174, 356" Style="WindowEmpty"
+        Icon="62" IconOffset="3, 6"
+        StartPosition="CenterScreen"
+        Visible="False">
+
+    <Button Name="btnClose" Position="-19, 5" Size="16, 16" Style="ButtonClose"/>
+
+    <PictureBox Position="6, 26" Size="162, 287" Style="Parchment"/>
+
+    <!-- Name -->
+    <PictureBox Position="13, 34" Size="148, 19" Style="TextWhite"/>
+    <Label Text="Name" Position="18, 36" Size="147, 10"/>
+    <Label Name="lblName2" Text="Player" Position="18, 36" Size="147, 10" Align="Right"/>
+
+    <!-- Job -->
+    <PictureBox Position="13, 54" Size="148, 19" Style="TextWhite"/>
+    <Label Text="Job" Position="18, 56" Size="147, 10"/>
+    <Label Name="lblJob2" Text="Warrior" Position="18, 56" Size="147, 10" Align="Right"/>
+
+    <!-- Level -->
+    <PictureBox Position="13, 74" Size="148, 19" Style="TextWhite"/>
+    <Label Text="Level" Position="18, 76" Size="147, 10"/>
+    <Label Name="lblLevel2" Text="99" Position="18, 76" Size="147, 10" Align="Right"/>
+
+    <!-- Guild Name -->
+    <PictureBox Position="13, 94" Size="148, 19" Style="TextWhite"/>
+    <Label Text="Guild" Position="18, 96" Size="147, 10"/>
+    <Label Name="lblGuild2" Text="Guild" Position="18, 96" Size="147, 10" Align="Right"/>
+
+    <!-- Health -->
+    <PictureBox Position="13, 114" Size="148, 19" Style="TextWhite"/>
+    <Label Text="Health" Position="18, 116" Size="147, 10"/>
+    <Label Name="lblHealth2" Text="999/999" Position="18, 116" Size="147, 10" Align="Right"/>
+
+    <!-- Spirit -->
+    <PictureBox Position="13, 134" Size="148, 19" Style="TextWhite"/>
+    <Label Text="Spirit" Position="18, 136" Size="147, 10"/>
+    <Label Name="lblSpirit2" Text="999/999" Position="18, 136" Size="147, 10" Align="Right"/>
+
+    <!-- Exp -->
+    <PictureBox Position="13, 154" Size="148, 19" Style="TextWhite"/>
+    <Label Text="Experience" Position="18, 156" Size="147, 10"/>
+    <Label Name="lblExperience2" Text="9999/9999" Position="18, 156" Size="147, 10" Align="Right"/>
+
+    <!-- Character Attributes -->
+    <PictureBox Position="18, 176" Size="138, 9" Style="BlackOval"/>
+    <Label Text="Attributes" Position="18, 173" Size="138, 10" Align="Center"/>
+
+    <!-- Strength -->
+    <PictureBox Position="13, 186" Size="148, 19" Style="TextBlack"/>
+    <Label Text="Strength" Position="18, 188" Size="138, 10"/>
+    <Button Name="btnStat_1" Position="144, 188" Size="15, 15" Style="ButtonStat"/>
+    <Label Name="lblStat_1" Text="255" Position="42, 188" Size="100, 15" Align="Right"/>
+
+    <!-- Vitality -->
+    <PictureBox Position="13, 206" Size="148, 19" Style="TextBlack"/>
+    <Label Text="Vitality" Position="18, 208" Size="138, 10"/>
+    <Button Name="btnStat_2" Position="144, 208" Size="15, 15" Style="ButtonStat"/>
+    <Label Name="lblStat_2" Text="255" Position="42, 208" Size="100, 15" Align="Right"/>
+
+    <!-- Intelligence -->
+    <PictureBox Position="13, 226" Size="148, 19" Style="TextBlack"/>
+    <Label Text="Intelligence" Position="18, 228" Size="138, 10"/>
+    <Button Name="btnStat_3" Position="144, 228" Size="15, 15" Style="ButtonStat"/>
+    <Label Name="lblStat_3" Text="255" Position="42, 228" Size="100, 15" Align="Right"/>
+
+    <!-- Luck -->
+    <PictureBox Position="13, 246" Size="148, 19" Style="TextBlack"/>
+    <Label Text="Luck" Position="18, 248" Size="138, 10"/>
+    <Button Name="btnStat_4" Position="144, 248" Size="15, 15" Style="ButtonStat"/>
+    <Label Name="lblStat_4" Text="255" Position="42, 248" Size="100, 15" Align="Right"/>
+
+    <!-- Spirit -->
+    <PictureBox Position="13, 266" Size="148, 19" Style="TextBlack"/>
+    <Label Text="Spirit" Position="18, 268" Size="138, 10"/>
+    <Button Name="btnStat_5" Position="144, 268" Size="15, 15" Style="ButtonStat"/>
+    <Label Name="lblStat_5" Text="255" Position="42, 268" Size="100, 15" Align="Right"/>
+
+    <!-- Available Stat Points -->
+    <PictureBox Position="13, 286" Size="148, 19" Style="TextBlack"/>
+    <Label Text="Stat Points" Position="18, 288" Size="138, 10"/>
+    <Label Name="lblPoints" Text="255" Position="42, 288" Size="100, 15" Align="Right"/>
+
+</Window>

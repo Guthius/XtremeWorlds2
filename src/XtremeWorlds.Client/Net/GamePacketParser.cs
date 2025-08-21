@@ -1,12 +1,16 @@
-﻿using Client.Game.UI;
-using Client.Game.UI.Windows;
-using Core;
+﻿using Core;
 using Core.Configurations;
 using Core.Globals;
 using Core.Net;
+using XtremeWorlds.Client.Features;
+using XtremeWorlds.Client.Features.Objects;
+using XtremeWorlds.Client.Features.States;
+using XtremeWorlds.Client.Features.Systems;
+using XtremeWorlds.Client.Features.UI;
+using XtremeWorlds.Client.Features.UI.Windows;
 using static Core.Globals.Command;
 
-namespace Client.Net;
+namespace XtremeWorlds.Client.Net;
 
 public sealed class GamePacketParser : PacketParser<Packets.ServerPackets>
 {
@@ -109,7 +113,6 @@ public sealed class GamePacketParser : PacketParser<Packets.ServerPackets>
         Bind(Packets.ServerPackets.SPartyVitals, Party.Packet_PartyVitals);
         Bind(Packets.ServerPackets.SClock, Packet_Clock);
         Bind(Packets.ServerPackets.STime, Packet_Time);
-        Bind(Packets.ServerPackets.SScriptEditor, Script.Packet_EditScript);
         Bind(Packets.ServerPackets.SItemEditor, Packet_EditItem);
         Bind(Packets.ServerPackets.SNpcEditor, Packet_NpcEditor);
         Bind(Packets.ServerPackets.SShopEditor, Packet_EditShop);
