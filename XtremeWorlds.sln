@@ -3,13 +3,32 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.2.32630.192
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client", "Source\Client\Client.csproj", "{E13FB217-705A-0B1C-129A-0E369CC6A402}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XtremeWorlds.Client", "src\XtremeWorlds.Client\XtremeWorlds.Client.csproj", "{E13FB217-705A-0B1C-129A-0E369CC6A402}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Server", "Source\Server\Server.csproj", "{07707C48-C41C-0620-2202-1DE28844CEDA}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XtremeWorlds.Server", "src\XtremeWorlds.Server\XtremeWorlds.Server.csproj", "{07707C48-C41C-0620-2202-1DE28844CEDA}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Core", "Source\Core\Core.csproj", "{8A65A1A1-43C8-049F-31D6-E02C2A04749F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XtremeWorlds.Core", "src\XtremeWorlds.Core\XtremeWorlds.Core.csproj", "{8A65A1A1-43C8-049F-31D6-E02C2A04749F}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Libraries", "Libraries", "{17067D41-98EF-470E-8A86-9C6587C3C69F}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{17067D41-98EF-470E-8A86-9C6587C3C69F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{4C191BDB-7CBA-4AD7-9887-4622C9C5FE7D}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+		Directory.Build.props = Directory.Build.props
+		Directory.Packages.props = Directory.Packages.props
+		LICENSE = LICENSE
+		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "github", "github", "{5B799EF8-7881-43DF-8658-F58983042189}"
+	ProjectSection(SolutionItems) = preProject
+		.github\LogoTransparent.png = .github\LogoTransparent.png
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{D20D76DB-DC09-475D-8EBB-4732E97F9A05}"
+	ProjectSection(SolutionItems) = preProject
+		.github\workflows\dotnet.yml = .github\workflows\dotnet.yml
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -76,6 +95,11 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{E13FB217-705A-0B1C-129A-0E369CC6A402} = {17067D41-98EF-470E-8A86-9C6587C3C69F}
+		{8A65A1A1-43C8-049F-31D6-E02C2A04749F} = {17067D41-98EF-470E-8A86-9C6587C3C69F}
+		{07707C48-C41C-0620-2202-1DE28844CEDA} = {17067D41-98EF-470E-8A86-9C6587C3C69F}
+		{5B799EF8-7881-43DF-8658-F58983042189} = {4C191BDB-7CBA-4AD7-9887-4622C9C5FE7D}
+		{D20D76DB-DC09-475D-8EBB-4732E97F9A05} = {5B799EF8-7881-43DF-8658-F58983042189}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {34F4C6E4-D681-43B9-A894-4D9A534ABC40}

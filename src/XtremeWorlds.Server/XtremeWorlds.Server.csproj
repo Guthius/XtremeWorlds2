@@ -4,8 +4,6 @@
         <OutputType>Exe</OutputType>
         <RootNamespace>Server</RootNamespace>
         <ApplicationIcon>Resources\Icon.ico</ApplicationIcon>
-        <OutputPath>..\..\Build\Server\</OutputPath>
-        <DefineConstants>SERVER</DefineConstants>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -13,22 +11,8 @@
         <Product>Game Server</Product>
     </PropertyGroup>
 
-    <PropertyGroup>
-        <Install>true</Install>
-        <InstallFrom>Disk</InstallFrom>
-        <UpdateEnabled>false</UpdateEnabled>
-        <UpdateMode>Foreground</UpdateMode>
-        <UpdateInterval>7</UpdateInterval>
-        <UpdateIntervalUnits>Days</UpdateIntervalUnits>
-        <UpdatePeriodically>false</UpdatePeriodically>
-        <UpdateRequired>false</UpdateRequired>
-        <ApplicationRevision>0</ApplicationRevision>
-        <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
-        <UseApplicationTrust>false</UseApplicationTrust>
-    </PropertyGroup>
-
     <ItemGroup>
-        <ProjectReference Include="..\Core\Core.csproj"/>
+        <ProjectReference Include="..\XtremeWorlds.Core\XtremeWorlds.Core.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
