@@ -1,16 +1,14 @@
-﻿using Core;
-using Core.Globals;
+﻿using Core.Globals;
 using Core.Net;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using Server.Game;
-using Server.Game.Net;
-using Server.Net;
+using XtremeWorlds.Server.Game.Net;
+using XtremeWorlds.Server.Game.Network;
 using static Core.Globals.Command;
 using static Core.Net.Packets;
 using Type = Core.Globals.Type;
 
-namespace Server;
+namespace XtremeWorlds.Server.Game.Objects;
 
 public static class Projectile
 {

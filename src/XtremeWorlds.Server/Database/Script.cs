@@ -1,79 +1,64 @@
-﻿using Core;
+﻿using Core.Configurations;
 using Core.Globals;
-using CSScripting;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.VisualBasic;
-using Server;
-using System;
-using System.ComponentModel.DataAnnotations;
-using System.Net.NetworkInformation;
-using System.Reflection;
+using XtremeWorlds.Server.Game;
+using XtremeWorlds.Server.Game.Events;
+using XtremeWorlds.Server.Game.Network;
 using static Core.Globals.Command;
-using static Core.Net.Packets;
-using static Core.Globals.Type;
-using static Server.Animation;
-using static Server.Event;
-using static Server.Item;
-using static Server.Moral;
-using static Server.NetworkSend;
-using static Server.Npc;
-using static Server.Party;
-using static Server.Player;
-using static Server.Projectile;
-using static Server.Resource;
-using static System.Net.Mime.MediaTypeNames;
-using System.Collections.Generic;
-using System.Net.Http.Headers;
-using Core.Configurations;
-using Server.Game;
+using static XtremeWorlds.Server.Game.Network.NetworkSend;
+using static XtremeWorlds.Server.Game.Objects.Player;
+using Animation = XtremeWorlds.Server.Game.Objects.Animation;
 using Constant = Core.Globals.Constant;
+using Event = XtremeWorlds.Server.Game.Events.Event;
 using EventCommand = Core.Globals.EventCommand;
+using Item = XtremeWorlds.Server.Game.Objects.Item;
+using Npc = XtremeWorlds.Server.Game.Objects.Npc;
+using Projectile = XtremeWorlds.Server.Game.Objects.Projectile;
+using Resource = XtremeWorlds.Server.Game.Objects.Resource;
 using Type = Core.Globals.Type;
 
-public class Script
+namespace XtremeWorlds.Server.Database;
+
+public static class Script
 {
-    public void Loop()
+    public static void Loop()
     {
-
     }
 
-    public void ServerSecond()
+    public static void ServerSecond()
     {
-
     }
 
 
-    public void ServerMinute()
+    public static void ServerMinute()
     {
-
     }
 
-    public void JoinGame(int index)
+    public static void JoinGame(int index)
     {
         // Warp the player to his saved location
         PlayerWarp(index, GetPlayerMap(index), GetPlayerX(index), GetPlayerY(index), (byte)Direction.Down);
 
         // Notify everyone that a player has joined the game.
-        NetworkSend.GlobalMsg(string.Format("{0} has joined {1}!", GetPlayerName(index), SettingsManager.Instance.GameName));
+        GlobalMsg(string.Format("{0} has joined {1}!", GetPlayerName(index), SettingsManager.Instance.GameName));
 
         // Send all the required game data to the user.
         CheckEquippedItems(index);
-        NetworkSend.SendInventory(index);
-        NetworkSend.SendWornEquipment(index);
-        NetworkSend.SendExp(index);
-        NetworkSend.SendHotbar(index);
-        NetworkSend.SendPlayerSkills(index);
-        NetworkSend.SendStats(index);
-        NetworkSend.SendJoinMap(index);
+        SendInventory(index);
+        SendWornEquipment(index);
+        SendExp(index);
+        SendHotbar(index);
+        SendPlayerSkills(index);
+        SendStats(index);
+        SendJoinMap(index);
 
         // Send the flag so they know they can start doing stuff
-        NetworkSend.SendInGame(index);
+        SendInGame(index);
 
         // Send welcome messages
-        NetworkSend.SendWelcome(index);
+        SendWelcome(index);
     }
 
-    public void MapDropItem(int index, int mapSlot, int invSlot, int amount, int mapNum, Type.Item item, int itemNum)
+    public static void MapDropItem(int index, int mapSlot, int invSlot, int amount, int mapNum, Type.Item item, int itemNum)
     {
         // Determine if the item is currency or stackable
         if (item.Type == (byte)ItemCategory.Currency || item.Stackable == 1)
@@ -90,7 +75,7 @@ public class Script
             {
                 SetPlayerInvValue(index, invSlot, playerInvValue - amount);
             }
-            NetworkSend.MapMsg(mapNum, string.Format("{0} has dropped {1} ({2}x).", GetPlayerName(index), GameLogic.CheckGrammar(item.Name), amount));
+            MapMsg(mapNum, string.Format("{0} has dropped {1} ({2}x).", GetPlayerName(index), GameLogic.CheckGrammar(item.Name), amount));
         }
         else
         {
@@ -98,22 +83,20 @@ public class Script
             SetPlayerInv(index, invSlot, -1);
             SetPlayerInvValue(index, invSlot, 0);
 
-            NetworkSend.MapMsg(mapNum, string.Format("{0} has dropped {1}.", GetPlayerName(index), GameLogic.CheckGrammar(item.Name)));
+            MapMsg(mapNum, string.Format("{0} has dropped {1}.", GetPlayerName(index), GameLogic.CheckGrammar(item.Name)));
         }
 
         // Send inventory update
-        NetworkSend.SendInventoryUpdate(index, invSlot);
+        SendInventoryUpdate(index, invSlot);
 
         // Spawn the item on the map
-        Server.Item.SpawnItemSlot(mapSlot, itemNum, amount, mapNum, GetPlayerX(index), GetPlayerY(index));
+        Item.SpawnItemSlot(mapSlot, itemNum, amount, mapNum, GetPlayerX(index), GetPlayerY(index));
     }
 
-    public void MapGetItem(int index, int mapNum, int mapSlot, int invSlot)
+    public static void MapGetItem(int index, int mapNum, int mapSlot, int invSlot)
     {
         // Set item in players inventor
-        int itemNum = (int)Data.MapItem[mapNum, mapSlot].Num;
-
-        SetPlayerInv(index, invSlot, (int)Data.MapItem[mapNum, mapSlot].Num);
+        SetPlayerInv(index, invSlot, Data.MapItem[mapNum, mapSlot].Num);
 
         string msg;
 
@@ -129,311 +112,302 @@ public class Script
         }
 
         // Erase item from the map
-        Server.Item.SpawnItemSlot(mapSlot, -1, 0, GetPlayerMap(index), Data.MapItem[mapNum, mapSlot].X, Data.MapItem[mapNum, mapSlot].Y);
-        NetworkSend.SendInventoryUpdate(index, invSlot);
-        NetworkSend.SendActionMsg(GetPlayerMap(index), msg, (int)ColorName.White, (byte)ActionMessageType.Static, GetPlayerX(index) * 32, GetPlayerY(index) * 32);
+        Item.SpawnItemSlot(mapSlot, -1, 0, GetPlayerMap(index), Data.MapItem[mapNum, mapSlot].X, Data.MapItem[mapNum, mapSlot].Y);
+        SendInventoryUpdate(index, invSlot);
+        SendActionMsg(GetPlayerMap(index), msg, (int)ColorName.White, (byte)ActionMessageType.Static, GetPlayerX(index) * 32, GetPlayerY(index) * 32);
     }
 
-    public void UnEquipItem(int index, int itemNum, int eqSlot)
+    public static void UnEquipItem(int index, int eqSlot)
     {
-        int m;
-
-        itemNum = GetPlayerEquipment(index, (Equipment)eqSlot);
-
-        m = FindOpenInvSlot(index, (int)Data.Player[index].Equipment[eqSlot]);
+        var m = FindOpenInvSlot(index, Data.Player[index].Equipment[eqSlot]);
         SetPlayerInv(index, m, Data.Player[index].Equipment[eqSlot]);
         SetPlayerInvValue(index, m, 0);
 
-        NetworkSend.PlayerMsg(index, "You unequip " + GameLogic.CheckGrammar(Data.Item[GetPlayerEquipment(index, (Equipment)eqSlot)].Name), (int)ColorName.Yellow);
+        PlayerMsg(index, "You unequip " + GameLogic.CheckGrammar(Data.Item[GetPlayerEquipment(index, (Equipment)eqSlot)].Name), (int)ColorName.Yellow);
 
         // remove equipment
         SetPlayerEquipment(index, -1, (Equipment)eqSlot);
-        NetworkSend.SendWornEquipment(index);
-        NetworkSend.SendMapEquipment(index);
-        NetworkSend.SendStats(index);
-        NetworkSend.SendInventory(index);
+        SendWornEquipment(index);
+        SendMapEquipment(index);
+        SendStats(index);
+        SendInventory(index);
 
         // send vitals
-        NetworkSend.SendVitals(index);
+        SendVitals(index);
     }
 
-    public void UseItem(int index, int itemNum, int invNum)
+    public static void UseItem(int index, int itemNum, int invNum)
     {
-        int i;
-        int n;
-        var tempItem = default(int);
-        int m;
-        var tempdata = new int[Enum.GetValues(typeof(Stat)).Length + 4];
-        var tempstr = new string[3];
+        var tempItem = 0;
 
         // Find out what kind of item it is
         switch (Data.Item[itemNum].Type)
         {
             case (byte)ItemCategory.Equipment:
+            {
+                int m;
+                switch (Data.Item[itemNum].SubType)
                 {
-                    switch (Data.Item[itemNum].SubType)
+                    case (byte)Equipment.Weapon:
                     {
-                        case (byte)Equipment.Weapon:
-                            {
 
-                                if (GetPlayerEquipment(index, Equipment.Weapon) >= 0)
-                                {
-                                    tempItem = GetPlayerEquipment(index, Equipment.Weapon);
-                                }
+                        if (GetPlayerEquipment(index, Equipment.Weapon) >= 0)
+                        {
+                            tempItem = GetPlayerEquipment(index, Equipment.Weapon);
+                        }
 
-                                SetPlayerEquipment(index, itemNum, Equipment.Weapon);
+                        SetPlayerEquipment(index, itemNum, Equipment.Weapon);
 
-                                NetworkSend.PlayerMsg(index, "You equip " + GameLogic.CheckGrammar(Data.Item[itemNum].Name), (int)ColorName.BrightGreen);
-                                TakeInv(index, itemNum, 1);
+                        PlayerMsg(index, "You equip " + GameLogic.CheckGrammar(Data.Item[itemNum].Name), (int)ColorName.BrightGreen);
+                        TakeInv(index, itemNum, 1);
 
-                                if (tempItem >= 0) // give back the stored item
-                                {
-                                    m = FindOpenInvSlot(index, tempItem);
-                                    SetPlayerInv(index, m, tempItem);
-                                    SetPlayerInvValue(index, m, 0);
-                                }
+                        if (tempItem >= 0) // give back the stored item
+                        {
+                            m = FindOpenInvSlot(index, tempItem);
+                            SetPlayerInv(index, m, tempItem);
+                            SetPlayerInvValue(index, m, 0);
+                        }
 
-                                NetworkSend.SendWornEquipment(index);
-                                NetworkSend.SendMapEquipment(index);
-                                NetworkSend.SendInventory(index);
-                                NetworkSend.SendInventoryUpdate(index, invNum);
-                                NetworkSend.SendStats(index);
+                        SendWornEquipment(index);
+                        SendMapEquipment(index);
+                        SendInventory(index);
+                        SendInventoryUpdate(index, invNum);
+                        SendStats(index);
 
-                                // send vitals
-                                NetworkSend.SendVitals(index);
-                                break;
-                            }
-
-                        case (byte)Equipment.Armor:
-                            {
-                                if (GetPlayerEquipment(index, Equipment.Armor) >= 0)
-                                {
-                                    tempItem = GetPlayerEquipment(index, Equipment.Armor);
-                                }
-
-                                SetPlayerEquipment(index, itemNum, Equipment.Armor);
-
-                                NetworkSend.PlayerMsg(index, "You equip " + GameLogic.CheckGrammar(Data.Item[itemNum].Name), (int)ColorName.BrightGreen);
-                                TakeInv(index, itemNum, 1);
-
-                                if (tempItem >= 0) // Return their old equipment to their inventory.
-                                {
-                                    m = FindOpenInvSlot(index, tempItem);
-                                    SetPlayerInv(index, m, tempItem);
-                                    SetPlayerInvValue(index, m, 0);
-                                }
-
-                                NetworkSend.SendWornEquipment(index);
-                                NetworkSend.SendMapEquipment(index);
-
-                                NetworkSend.SendInventory(index);
-                                NetworkSend.SendStats(index);
-
-                                // send vitals
-                                NetworkSend.SendVitals(index);
-                                break;
-                            }
-
-                        case (byte)Equipment.Helmet:
-                            {
-                                if (GetPlayerEquipment(index, Equipment.Helmet) >= 0)
-                                {
-                                    tempItem = GetPlayerEquipment(index, Equipment.Helmet);
-                                }
-
-                                SetPlayerEquipment(index, itemNum, Equipment.Helmet);
-
-                                NetworkSend.PlayerMsg(index, "You equip " + GameLogic.CheckGrammar(Data.Item[itemNum].Name), (int)ColorName.BrightGreen);
-                                TakeInv(index, itemNum, 1);
-
-                                if (tempItem >= 0) // give back the stored item
-                                {
-                                    m = FindOpenInvSlot(index, tempItem);
-                                    SetPlayerInv(index, m,  tempItem);
-                                    SetPlayerInvValue(index, m, 0);
-                                }
-
-                                NetworkSend.SendWornEquipment(index);
-                                NetworkSend.SendMapEquipment(index);
-                                NetworkSend.SendInventory(index);
-                                NetworkSend.SendStats(index);
-
-                                // send vitals
-                                NetworkSend.SendVitals(index);
-                                break;
-                            }
-
-                        case (byte)Equipment.Shield:
-                            {
-                                if (GetPlayerEquipment(index, Equipment.Shield) >= 0)
-                                {
-                                    tempItem = GetPlayerEquipment(index, Equipment.Shield);
-                                }
-
-                                SetPlayerEquipment(index, itemNum, Equipment.Shield);
-
-                                NetworkSend.PlayerMsg(index, "You equip " + GameLogic.CheckGrammar(Data.Item[itemNum].Name), (int)ColorName.BrightGreen);
-                                TakeInv(index, itemNum, 1);
-
-                                if (tempItem >= 0) // give back the stored item
-                                {
-                                    m = FindOpenInvSlot(index, tempItem);
-                                    SetPlayerInv(index, m, tempItem);
-                                    SetPlayerInvValue(index, m, 0);
-                                }
-
-                                NetworkSend.SendWornEquipment(index);
-                                NetworkSend.SendMapEquipment(index);
-                                NetworkSend.SendInventory(index);
-                                NetworkSend.SendStats(index);
-
-                                // send vitals
-                                NetworkSend.SendVitals(index);
-                                break;
-                            }
-
+                        // send vitals
+                        SendVitals(index);
+                        break;
                     }
 
-                    break;
+                    case (byte)Equipment.Armor:
+                    {
+                        if (GetPlayerEquipment(index, Equipment.Armor) >= 0)
+                        {
+                            tempItem = GetPlayerEquipment(index, Equipment.Armor);
+                        }
+
+                        SetPlayerEquipment(index, itemNum, Equipment.Armor);
+
+                        PlayerMsg(index, "You equip " + GameLogic.CheckGrammar(Data.Item[itemNum].Name), (int)ColorName.BrightGreen);
+                        TakeInv(index, itemNum, 1);
+
+                        if (tempItem >= 0) // Return their old equipment to their inventory.
+                        {
+                            m = FindOpenInvSlot(index, tempItem);
+                            SetPlayerInv(index, m, tempItem);
+                            SetPlayerInvValue(index, m, 0);
+                        }
+
+                        SendWornEquipment(index);
+                        SendMapEquipment(index);
+
+                        SendInventory(index);
+                        SendStats(index);
+
+                        // send vitals
+                        SendVitals(index);
+                        break;
+                    }
+
+                    case (byte)Equipment.Helmet:
+                    {
+                        if (GetPlayerEquipment(index, Equipment.Helmet) >= 0)
+                        {
+                            tempItem = GetPlayerEquipment(index, Equipment.Helmet);
+                        }
+
+                        SetPlayerEquipment(index, itemNum, Equipment.Helmet);
+
+                        PlayerMsg(index, "You equip " + GameLogic.CheckGrammar(Data.Item[itemNum].Name), (int)ColorName.BrightGreen);
+                        TakeInv(index, itemNum, 1);
+
+                        if (tempItem >= 0) // give back the stored item
+                        {
+                            m = FindOpenInvSlot(index, tempItem);
+                            SetPlayerInv(index, m,  tempItem);
+                            SetPlayerInvValue(index, m, 0);
+                        }
+
+                        SendWornEquipment(index);
+                        SendMapEquipment(index);
+                        SendInventory(index);
+                        SendStats(index);
+
+                        // send vitals
+                        SendVitals(index);
+                        break;
+                    }
+
+                    case (byte)Equipment.Shield:
+                    {
+                        if (GetPlayerEquipment(index, Equipment.Shield) >= 0)
+                        {
+                            tempItem = GetPlayerEquipment(index, Equipment.Shield);
+                        }
+
+                        SetPlayerEquipment(index, itemNum, Equipment.Shield);
+
+                        PlayerMsg(index, "You equip " + GameLogic.CheckGrammar(Data.Item[itemNum].Name), (int)ColorName.BrightGreen);
+                        TakeInv(index, itemNum, 1);
+
+                        if (tempItem >= 0) // give back the stored item
+                        {
+                            m = FindOpenInvSlot(index, tempItem);
+                            SetPlayerInv(index, m, tempItem);
+                            SetPlayerInvValue(index, m, 0);
+                        }
+
+                        SendWornEquipment(index);
+                        SendMapEquipment(index);
+                        SendInventory(index);
+                        SendStats(index);
+
+                        // send vitals
+                        SendVitals(index);
+                        break;
+                    }
+
                 }
+
+                break;
+            }
 
             case (byte)ItemCategory.Consumable:
+            {
+                switch (Data.Item[itemNum].SubType)
                 {
-                    switch (Data.Item[itemNum].SubType)
+                    case (byte)ConsumableEffect.RestoresHealth:
                     {
-                        case (byte)ConsumableEffect.RestoresHealth:
-                            {
-                                NetworkSend.SendActionMsg(GetPlayerMap(index), "+" + Data.Item[itemNum].Data1, (int)ColorName.BrightGreen, (byte)ActionMessageType.Scroll, GetPlayerX(index) * 32, GetPlayerY(index) * 32);
-                                Server.Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
-                                SetPlayerVital(index, Vital.Health, GetPlayerVital(index, Vital.Health) + Data.Item[itemNum].Data1);
-                                if (Data.Item[itemNum].Stackable == 1)
-                                {
-                                    TakeInv(index, itemNum, 1);
-                                }
-                                else
-                                {
-                                    TakeInv(index, itemNum, 0);
-                                }
-                                NetworkSend.SendVital(index, Vital.Health);
-                                break;
-                            }
-
-                        case (byte)ConsumableEffect.RestoresMana:
-                            {
-                                NetworkSend.SendActionMsg(GetPlayerMap(index), "+" + Data.Item[itemNum].Data1, (int)ColorName.BrightBlue, (byte)ActionMessageType.Scroll, GetPlayerX(index) * 32, GetPlayerY(index) * 32);
-                                Server.Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
-                                SetPlayerVital(index, Vital.Stamina, GetPlayerVital(index, Vital.Stamina) + Data.Item[itemNum].Data1);
-                                if (Data.Item[itemNum].Stackable == 1)
-                                {
-                                    TakeInv(index, itemNum, 1);
-                                }
-                                else
-                                {
-                                    TakeInv(index, itemNum, 0);
-                                }
-                                NetworkSend.SendVital(index, Vital.Stamina);
-                                break;
-                            }
-
-                        case (byte)ConsumableEffect.RestoresStamina:
-                            {
-                                Server.Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
-                                SetPlayerVital(index, Vital.Stamina, GetPlayerVital(index, Vital.Stamina) + Data.Item[itemNum].Data1);
-                                if (Data.Item[itemNum].Stackable == 1)
-                                {
-                                    TakeInv(index, itemNum, 1);
-                                }
-                                else
-                                {
-                                    TakeInv(index, itemNum, 0);
-                                }
-                                NetworkSend.SendVital(index, Vital.Stamina);
-                                break;
-                            }
-
-                        case (byte)ConsumableEffect.GrantsExperience:
-                            {
-                                Server.Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
-                                SetPlayerExp(index, GetPlayerExp(index) + Data.Item[itemNum].Data1);
-                                if (Data.Item[itemNum].Stackable == 1)
-                                {
-                                    TakeInv(index, itemNum, 1);
-                                }
-                                else
-                                {
-                                    TakeInv(index, itemNum, 0);
-                                }
-                                NetworkSend.SendExp(index);
-                                break;
-                            }
-
-                    }
-
-                    break;
-                }
-
-            case (byte)ItemCategory.Projectile:
-                {
-                    if (Data.Item[itemNum].Ammo > 0)
-                    {
-                        if (HasItem(index, Data.Item[itemNum].Ammo) > 0)
+                        SendActionMsg(GetPlayerMap(index), "+" + Data.Item[itemNum].Data1, (int)ColorName.BrightGreen, (byte)ActionMessageType.Scroll, GetPlayerX(index) * 32, GetPlayerY(index) * 32);
+                        Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
+                        SetPlayerVital(index, Vital.Health, GetPlayerVital(index, Vital.Health) + Data.Item[itemNum].Data1);
+                        if (Data.Item[itemNum].Stackable == 1)
                         {
-                            TakeInv(index, Data.Item[itemNum].Ammo, 1);
-                            Server.Projectile.PlayerFireProjectile(index);
+                            TakeInv(index, itemNum, 1);
                         }
                         else
                         {
-                            NetworkSend.PlayerMsg(index, "No More " + Data.Item[Data.Item[GetPlayerEquipment(index, Equipment.Weapon)].Ammo].Name + " !", (int)ColorName.BrightRed);
-                            return;
+                            TakeInv(index, itemNum, 0);
                         }
+                        SendVital(index, Vital.Health);
+                        break;
+                    }
+
+                    case (byte)ConsumableEffect.RestoresMana:
+                    {
+                        SendActionMsg(GetPlayerMap(index), "+" + Data.Item[itemNum].Data1, (int)ColorName.BrightBlue, (byte)ActionMessageType.Scroll, GetPlayerX(index) * 32, GetPlayerY(index) * 32);
+                        Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
+                        SetPlayerVital(index, Vital.Stamina, GetPlayerVital(index, Vital.Stamina) + Data.Item[itemNum].Data1);
+                        if (Data.Item[itemNum].Stackable == 1)
+                        {
+                            TakeInv(index, itemNum, 1);
+                        }
+                        else
+                        {
+                            TakeInv(index, itemNum, 0);
+                        }
+                        SendVital(index, Vital.Stamina);
+                        break;
+                    }
+
+                    case (byte)ConsumableEffect.RestoresStamina:
+                    {
+                        Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
+                        SetPlayerVital(index, Vital.Stamina, GetPlayerVital(index, Vital.Stamina) + Data.Item[itemNum].Data1);
+                        if (Data.Item[itemNum].Stackable == 1)
+                        {
+                            TakeInv(index, itemNum, 1);
+                        }
+                        else
+                        {
+                            TakeInv(index, itemNum, 0);
+                        }
+                        SendVital(index, Vital.Stamina);
+                        break;
+                    }
+
+                    case (byte)ConsumableEffect.GrantsExperience:
+                    {
+                        Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
+                        SetPlayerExp(index, GetPlayerExp(index) + Data.Item[itemNum].Data1);
+                        if (Data.Item[itemNum].Stackable == 1)
+                        {
+                            TakeInv(index, itemNum, 1);
+                        }
+                        else
+                        {
+                            TakeInv(index, itemNum, 0);
+                        }
+                        SendExp(index);
+                        break;
+                    }
+
+                }
+
+                break;
+            }
+
+            case (byte)ItemCategory.Projectile:
+            {
+                if (Data.Item[itemNum].Ammo > 0)
+                {
+                    if (HasItem(index, Data.Item[itemNum].Ammo) > 0)
+                    {
+                        TakeInv(index, Data.Item[itemNum].Ammo, 1);
+                        Projectile.PlayerFireProjectile(index);
                     }
                     else
                     {
-                        Server.Projectile.PlayerFireProjectile(index);
+                        PlayerMsg(index, "No More " + Data.Item[Data.Item[GetPlayerEquipment(index, Equipment.Weapon)].Ammo].Name + " !", (int)ColorName.BrightRed);
                         return;
                     }
-
-                    break;
                 }
+                else
+                {
+                    Projectile.PlayerFireProjectile(index);
+                    return;
+                }
+
+                break;
+            }
 
             case (byte)ItemCategory.Event:
+            {
+                var n = Data.Item[itemNum].Data1;
+
+                switch (Data.Item[itemNum].SubType)
                 {
-                    n = Data.Item[itemNum].Data1;
-
-                    switch (Data.Item[itemNum].SubType)
+                    case (byte)EventCommand.ModifyVariable:
                     {
-                        case (byte)EventCommand.ModifyVariable:
-                            {
-                                Data.Player[index].Variables[n] = Data.Item[itemNum].Data2;
-                                break;
-                            }
-                        case (byte)EventCommand.ModifySwitch:
-                            {
-                                Data.Player[index].Switches[n] = (byte)Data.Item[itemNum].Data2;
-                                break;
-                            }
-                        case (byte)EventCommand.Key:
-                            {
-                                EventLogic.TriggerEvent(index, 1, 0, GetPlayerX(index), GetPlayerY(index));
-                                break;
-                            }
+                        Data.Player[index].Variables[n] = Data.Item[itemNum].Data2;
+                        break;
                     }
-
-                    break;
+                    case (byte)EventCommand.ModifySwitch:
+                    {
+                        Data.Player[index].Switches[n] = (byte)Data.Item[itemNum].Data2;
+                        break;
+                    }
+                    case (byte)EventCommand.Key:
+                    {
+                        EventLogic.TriggerEvent(index, 1, 0, GetPlayerX(index), GetPlayerY(index));
+                        break;
+                    }
                 }
+
+                break;
+            }
 
             case (byte)ItemCategory.Skill:
-                {
-                    PlayerLearnSkill(index, itemNum);
-                    break;
-                }
+            {
+                PlayerLearnSkill(index, itemNum);
+                break;
+            }
         }
     }
 
     public static void PlayerLearnSkill(int index, int itemNum, int skillNum = -1)
     {
         int n;
-        int i;
 
         // Get the skill num
         if (skillNum >= 0)
@@ -452,7 +426,7 @@ public class Script
         if (Data.Skill[n].JobReq == GetPlayerJob(index) | Data.Skill[n].JobReq == -1)
         {
             // Make sure they are the right level
-            i = Data.Skill[n].LevelReq;
+            var i = Data.Skill[n].LevelReq;
 
             if (i <= GetPlayerLevel(index))
             {
@@ -467,39 +441,38 @@ public class Script
                         SetPlayerSkill(index, i, n);
                         if (itemNum >= 0)
                         {
-                            Server.Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
+                            Animation.SendAnimation(GetPlayerMap(index), Data.Item[itemNum].Animation, 0, 0, (byte)TargetType.Player, index);
                             TakeInv(index, itemNum, 0);
                         }
-                        NetworkSend.PlayerMsg(index, "You study the skill carefully.", (int)ColorName.Yellow);
-                        NetworkSend.PlayerMsg(index, "You have learned a new skill!", (int)ColorName.BrightGreen);
-                        NetworkSend.SendPlayerSkills(index);
+                        PlayerMsg(index, "You study the skill carefully.", (int)ColorName.Yellow);
+                        PlayerMsg(index, "You have learned a new skill!", (int)ColorName.BrightGreen);
+                        SendPlayerSkills(index);
                     }
                     else
                     {
-                        NetworkSend.PlayerMsg(index, "You have already learned this skill!", (int)ColorName.BrightRed);
+                        PlayerMsg(index, "You have already learned this skill!", (int)ColorName.BrightRed);
                     }
                 }
                 else
                 {
-                    NetworkSend.PlayerMsg(index, "You have learned all that you can learn!", (int)ColorName.BrightRed);
+                    PlayerMsg(index, "You have learned all that you can learn!", (int)ColorName.BrightRed);
                 }
             }
             else
             {
-                NetworkSend.PlayerMsg(index, "You must be level " + i + " to learn this skill.", (int)ColorName.Yellow);
+                PlayerMsg(index, "You must be level " + i + " to learn this skill.", (int)ColorName.Yellow);
             }
         }
         else
         {
-            NetworkSend.PlayerMsg(index, string.Format("Only {0} can use this skill.", GameLogic.CheckGrammar(Data.Job[Data.Skill[n].JobReq].Name, 1)), (int)ColorName.BrightRed);
+            PlayerMsg(index, string.Format("Only {0} can use this skill.", GameLogic.CheckGrammar(Data.Job[Data.Skill[n].JobReq].Name, 1)), (int)ColorName.BrightRed);
         }
     }
 
-    public void JoinMap(int index)
+    public static void JoinMap(int index)
     {
         byte[] data;
-        int dataSize;
-        int mapNum = GetPlayerMap(index);
+        var mapNum = GetPlayerMap(index);
 
         // Send all players on current map to index
         foreach (var player in PlayerService.Instance.Players)
@@ -513,7 +486,7 @@ public class Script
                         data = GetPlayerDataPacket(player.Id);
                         PlayerService.Instance.SendDataTo(index, data);
                         SendPlayerXyTo(index, player.Id);
-                        NetworkSend.SendMapEquipmentTo(index, player.Id);
+                        SendMapEquipmentTo(index, player.Id);
                     }
                 }
             }
@@ -525,27 +498,25 @@ public class Script
         data = GetPlayerDataPacket(index);
         NetworkConfig.SendDataToMap(mapNum, data);
         SendPlayerXyToMap(index);
-        NetworkSend.SendMapEquipment(index);
-        NetworkSend.SendVitals(index);
+        SendMapEquipment(index);
+        SendVitals(index);
     }
 
-    public void LeaveMap(int index, int mapNum)
+    public static void LeaveMap(int index, int mapNum)
     {
-
     }
 
-    public void LeftGame(int index)
+    public static void LeftGame(int index)
     {
-
     }
 
-    public void OnDeath(int index)
+    public static void OnDeath(int index)
     {
         // Set HP to nothing
         SetPlayerVital(index, Vital.Health, 0);
 
         // Restore vitals
-        var count = System.Enum.GetValues(typeof(Vital)).Length;
+        var count = Enum.GetValues(typeof(Vital)).Length;
         for (int i = 0, loopTo = count; i < loopTo; i++)
             SetPlayerVital(index, (Vital)i, GetPlayerMaxVital(index, (Vital)i));
 
@@ -571,34 +542,34 @@ public class Script
         }
     }
 
-    public void BufferSkill(int mapNum, int index, int skillNum)
+    public static  void BufferSkill(int mapNum, int index, int skillNum)
     {
   
     }
 
-    public int KillPlayer(int index)
+    public static int KillPlayer(int index)
     {
         int exp = GetPlayerExp(index) / 3;
         
         if (exp == 0)
         {
-            NetworkSend.PlayerMsg(index, "You've lost no experience.", (int)ColorName.BrightGreen);
+            PlayerMsg(index, "You've lost no experience.", (int)ColorName.BrightGreen);
         }
         else
         {                   
-            NetworkSend.SendExp(index);
-            NetworkSend.PlayerMsg(index, string.Format("You've lost {0} experience.", exp), (int)ColorName.BrightRed);
+            SendExp(index);
+            PlayerMsg(index, string.Format("You've lost {0} experience.", exp), (int)ColorName.BrightRed);
         }
 
         return exp;
     }
 
-    public void TrainStat(int index, int tmpStat)
+    public static void TrainStat(int index, int tmpStat)
     {
         // make sure their stats are not maxed
         if (GetPlayerRawStat(index, (Stat)tmpStat) >= Constant.MaxStats)
         {
-            NetworkSend.PlayerMsg(index, "You cannot spend any more points on that stat.", (int)ColorName.BrightRed);
+            PlayerMsg(index, "You cannot spend any more points on that stat.", (int)ColorName.BrightRed);
             return;
         }
 
@@ -609,19 +580,19 @@ public class Script
         SetPlayerPoints(index, GetPlayerPoints(index) - 1);
 
         // send player new data
-        NetworkSend.SendPlayerData(index);
+        SendPlayerData(index);
     }
 
-    public void PlayerMove(int index)
+    public static void PlayerMove(int index)
     {
 
     }
 
-    public void UpdateMapAi()
+    public static void UpdateMapAi()
     {
 
         long tickCount = General.GetTimeMs();
-        var entities = Core.Globals.Entity.Instances;
+        var entities = Entity.Instances;
 
         for (int x = 0; x < entities.Count; x++)
         {
@@ -672,7 +643,7 @@ public class Script
                                         {
                                             if (!string.IsNullOrEmpty(entity.AttackSay))
                                             {
-                                                NetworkSend.PlayerMsg(player.Id, GameLogic.CheckGrammar(entity.Name, 1) + " says, '" + entity.AttackSay + "' to you.", (int)ColorName.Yellow);
+                                                PlayerMsg(player.Id, GameLogic.CheckGrammar(entity.Name, 1) + " says, '" + entity.AttackSay + "' to you.", (int)ColorName.Yellow);
                                             }
                                             entity.TargetType = (byte)TargetType.Player;
                                             entity.Target = player.Id;
@@ -692,7 +663,7 @@ public class Script
                                 {
                                     if (otherEntity.Map != mapNum) continue;
                                     if (ReferenceEquals(otherEntity, entity)) continue;
-                                    if ((int)otherEntity.Faction > 0 && otherEntity.Faction != entity.Faction)
+                                    if (otherEntity.Faction > 0 && otherEntity.Faction != entity.Faction)
                                     {
                                         int n = entity.Range;
                                         int distanceX = entity.X - otherEntity.X;
@@ -730,7 +701,7 @@ public class Script
                     byte targetType = entity.TargetType;
                     int targetX = 0, targetY = 0;
 
-                    if (entity.Type == Core.Globals.Entity.EntityType.Npc)
+                    if (entity.Type == Entity.EntityType.Npc)
                     {
                         if (entity.Behaviour != (byte)NpcBehavior.ShopKeeper && entity.Behaviour != (byte)NpcBehavior.QuestGiver)
                         {
@@ -751,14 +722,14 @@ public class Script
 
                             if (targetVerify)
                             {
-                                if (!Server.Event.IsOneBlockAway(targetX, targetY, (int)entity.X, (int)entity.Y))
+                                if (!Event.IsOneBlockAway(targetX, targetY, entity.X, entity.Y))
                                 {
-                                    int i = EventLogic.FindNpcPath(mapNum, Core.Globals.Entity.Index(entity), targetX, targetY);
+                                    int i = EventLogic.FindNpcPath(mapNum, Entity.Index(entity), targetX, targetY);
                                     if (i < 4)
                                     {
-                                        if (Server.Npc.CanNpcMove(mapNum, Core.Globals.Entity.Index(entity), (byte)i))
+                                        if (Npc.CanNpcMove(mapNum, Entity.Index(entity), (byte)i))
                                         {
-                                            Server.Npc.NpcMove(mapNum, Core.Globals.Entity.Index(entity), (byte)i, (int)MovementState.Walking);
+                                            Npc.NpcMove(mapNum, Entity.Index(entity), (byte)i, (int)MovementState.Walking);
                                         }
                                     }
                                     else
@@ -767,16 +738,16 @@ public class Script
                                         if (i == 1)
                                         {
                                             i = (int)Math.Round(new Random().NextDouble() * 3) + 1;
-                                            if (Server.Npc.CanNpcMove(mapNum, Core.Globals.Entity.Index(entity), (byte)i))
+                                            if (Npc.CanNpcMove(mapNum, Entity.Index(entity), (byte)i))
                                             {
-                                                Server.Npc.NpcMove(mapNum, Core.Globals.Entity.Index(entity), (byte)i, (int)MovementState.Walking);
+                                                Npc.NpcMove(mapNum, Entity.Index(entity), (byte)i, (int)MovementState.Walking);
                                             }
                                         }
                                     }
                                 }
                                 else
                                 {
-                                    Server.Npc.NpcDir(mapNum, Core.Globals.Entity.Index(entity), Server.Event.GetNpcDir(targetX, targetY, (int)entity.X, (int)entity.Y));
+                                    Npc.NpcDir(mapNum, Entity.Index(entity), Event.GetNpcDir(targetX, targetY, entity.X, entity.Y));
                                 }
                             }
                             else
@@ -785,9 +756,9 @@ public class Script
                                 if (i == 1)
                                 {
                                     i = (int)Math.Round(new Random().NextDouble() * 4);
-                                    if (Server.Npc.CanNpcMove(mapNum, Core.Globals.Entity.Index(entity), (byte)i))
+                                    if (Npc.CanNpcMove(mapNum, Entity.Index(entity), (byte)i))
                                     {
-                                        Server.Npc.NpcMove(mapNum, Core.Globals.Entity.Index(entity), (byte)i, (int)MovementState.Walking);
+                                        Npc.NpcMove(mapNum, Entity.Index(entity), (byte)i, (int)MovementState.Walking);
                                     }
                                 }
                             }
@@ -822,7 +793,7 @@ public class Script
                     }
 
                     // Spawning an Npc
-                    if (entity.Type == Core.Globals.Entity.EntityType.Npc)
+                    if (entity.Type == Entity.EntityType.Npc)
                     {
                         if (entity.Num == -1)
                         {
@@ -830,7 +801,7 @@ public class Script
                             {
                                 if (tickCount > entity.SpawnWait + entity.SpawnSecs * 1000)
                                 {
-                                    Server.Npc.SpawnNpc(x, mapNum);
+                                    Npc.SpawnNpc(x, mapNum);
                                 }
                             }
                         }
@@ -855,12 +826,12 @@ public class Script
                     {
                         item.PlayerName = "";
                         item.PlayerTimer = 0;
-                        Server.Item.SendMapItemsToAll(mapNum);
+                        Item.SendMapItemsToAll(mapNum);
                     }
                     if (item.CanDespawn && item.DespawnTimer < now)
                     {
-                        Database.ClearMapItem(i, mapNum);
-                        Server.Item.SendMapItemsToAll(mapNum);
+                        Game.Database.ClearMapItem(i, mapNum);
+                        Item.SendMapItemsToAll(mapNum);
                     }
                 }
             }
@@ -882,7 +853,7 @@ public class Script
                                 resData.Timer = now;
                                 resData.State = 0;
                                 resData.Health = (byte)Data.Resource[resourceindex].Health;
-                                Server.Resource.SendMapResourceToMap(mapNum);
+                                Resource.SendMapResourceToMap(mapNum);
                             }
                         }
                     }
@@ -891,18 +862,15 @@ public class Script
         }
     }
 
-    public void CheckPlayerLevelUp(int index)
+    public static void CheckPlayerLevelUp(int index)
     {
-        int expRollover;
-        int level_count;
-
-        level_count = 0;
+        var level_count = 0;
 
         while (GetPlayerExp(index) >= GetPlayerNextLevel(index))
         {
-            expRollover = GetPlayerExp(index) - GetPlayerNextLevel(index);
+            var expRollover = GetPlayerExp(index) - GetPlayerNextLevel(index);
             SetPlayerLevel(index, GetPlayerLevel(index) + 1);
-            SetPlayerPoints(index, GetPlayerPoints(index) + Server.Constant.StatPerLevel);
+            SetPlayerPoints(index, GetPlayerPoints(index) + XtremeWorlds.Server.Game.Constant.StatPerLevel);
             SetPlayerExp(index, expRollover);
             level_count += 1;
         }
@@ -912,16 +880,16 @@ public class Script
             if (level_count == 1)
             {
                 // singular
-                NetworkSend.GlobalMsg(GetPlayerName(index) + " has gained " + level_count + " level!");
+                GlobalMsg(GetPlayerName(index) + " has gained " + level_count + " level!");
             }
             else
             {
                 // plural
-                NetworkSend.GlobalMsg(GetPlayerName(index) + " has gained " + level_count + " levels!");
+                GlobalMsg(GetPlayerName(index) + " has gained " + level_count + " levels!");
             }
-            NetworkSend.SendActionMsg(GetPlayerMap(index), "Level Up", (int) ColorName.Yellow, 1, GetPlayerX(index) * 32, GetPlayerY(index) * 32);
-            NetworkSend.SendExp(index);
-            NetworkSend.SendPlayerData(index);
+            SendActionMsg(GetPlayerMap(index), "Level Up", (int) ColorName.Yellow, 1, GetPlayerX(index) * 32, GetPlayerY(index) * 32);
+            SendExp(index);
+            SendPlayerData(index);
         }
     }
 }

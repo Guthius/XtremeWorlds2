@@ -2,7 +2,6 @@
 <Window Name="winRegister" Caption="Register Account"
         Size="276, 202"
         Icon="45" IconOffset="3, 5"
-        Design="WindowNormal"
         StartPosition="CenterScreen"
         Visible="False">
 
@@ -21,18 +20,8 @@
     <Label Text="Retype Password" Position="66, 110" Size="142, 10" Align="Center"/>
     <TextBox Name="txtRetypePassword" Position="67, 127" Size="142, 19" Censor="True"/>
 
-    <Button Name="btnAccept" Text="Accept"
-            Position="68, 152" Size="67, 22"
-            Design="Green"
-            DesignHover="GreenHover"
-            DesignMouseDown="GreenClick"/>
-
-    <Button Name="btnExit" Text="Back"
-            Position="142, 152" Size="67, 22"
-            Design="Red"
-            DesignHover="RedHover"
-            DesignMouseDown="RedClick"/>
-
-    <Button Name="btnClose" Position="-19, 5" Size="16, 16" Image="8" ImageHover="9" ImageMouseDown="10"/>
+    <Button Name="btnAccept" Text="Accept" Position="68, 152" Size="67, 22"/>
+    <Button Name="btnExit" Text="Back" Position="142, 152" Size="67, 22" Style="ButtonRed"/>
+    <Button Name="btnClose" Position="-19, 5" Size="16, 16" Style="ButtonClose"/>
 
 </Window>

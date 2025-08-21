@@ -1,0 +1,6 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Style Texture="Buttons.png">
+    <Part Name="ButtonNormal" TextureRect="0, 144, 36, 36" NinePatchRect="2, 2, 32, 32"/>
+    <Part Name="ButtonHot" TextureRect="36, 144, 36, 36" NinePatchRect="2, 2, 32, 32"/>
+    <Part Name="ButtonPressed" TextureRect="72, 144, 36, 36" NinePatchRect="2, 2, 32, 32"/>
+</Style>

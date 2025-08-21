@@ -1,0 +1,433 @@
+﻿using Core.Common;
+using Core.Configurations;
+using Core.Globals;
+using XtremeWorlds.Client.Features.Objects;
+using XtremeWorlds.Client.Features.States;
+using XtremeWorlds.Client.Features.Systems;
+using XtremeWorlds.Client.Features.UI;
+using XtremeWorlds.Client.Net;
+using static Core.Globals.Command;
+using Type = Core.Globals.Type;
+
+namespace XtremeWorlds.Client.Features;
+
+public class General
+{
+    public static GameClient Client = new GameClient();
+    public static RandomUtility Random = new RandomUtility();
+
+    public static byte[] AesKey = new byte[32];
+    public static byte[] AesIV = new byte[16];
+
+    public static int GetTickCount()
+    {
+        return Environment.TickCount;
+    }
+
+    public static void Startup()
+    {
+        GameState.InMenu = true;
+        ClearGameData();
+        LoadGame();
+    }
+
+    public static void LoadGame()
+    {
+        LocalesManager.Initialize();
+        CheckAnimations();
+        CheckCharacters();
+        CheckEmotes();
+        CheckTilesets();
+        CheckFogs();
+        CheckItems();
+        CheckPanoramas();
+        CheckPaperdolls();
+        CheckParallax();
+        CheckPictures();
+        CheckProjectile();
+        CheckResources();
+        CheckSkills();
+        CheckInterface();
+        CheckGradients();
+        CheckDesigns();
+        Sound.InitializeBass();
+        Gui.Init();
+        GameState.Ping = -1;
+    }
+
+    public static void CheckAnimations()
+    {
+        GameState.NumAnimations = GetFileCount(DataPath.Animations);
+    }
+
+    public static void CheckCharacters()
+    {
+        GameState.NumCharacters = GetFileCount(DataPath.Characters);
+    }
+
+    public static void CheckEmotes()
+    {
+        GameState.NumEmotes = GetFileCount(DataPath.Emotes);
+    }
+
+    public static void CheckTilesets()
+    {
+        GameState.NumTileSets = GetFileCount(DataPath.Tilesets);
+    }
+
+    public static void CheckFogs()
+    {
+        GameState.NumFogs = GetFileCount(DataPath.Fogs);
+    }
+
+    public static void CheckItems()
+    {
+        GameState.NumItems = GetFileCount(DataPath.Items);
+    }
+
+    public static void CheckPanoramas()
+    {
+        GameState.NumPanoramas = GetFileCount(DataPath.Panoramas);
+    }
+
+    public static void CheckPaperdolls()
+    {
+        GameState.NumPaperdolls = GetFileCount(DataPath.Paperdolls);
+    }
+
+    public static void CheckParallax()
+    {
+        GameState.NumParallax = GetFileCount(DataPath.Parallax);
+    }
+
+    public static void CheckPictures()
+    {
+        GameState.NumPictures = GetFileCount(DataPath.Pictures);
+    }
+
+    public static void CheckProjectile()
+    {
+        GameState.NumProjectiles = GetFileCount(DataPath.Projectiles);
+    }
+
+    public static void CheckResources()
+    {
+        GameState.NumResources = GetFileCount(DataPath.Resources);
+    }
+
+    public static void CheckSkills()
+    {
+        GameState.NumSkills = GetFileCount(DataPath.Skills);
+    }
+
+    public static void CheckInterface()
+    {
+        GameState.NumInterface = GetFileCount(DataPath.Gui);
+    }
+
+    public static void CheckGradients()
+    {
+        GameState.NumGradients = GetFileCount(DataPath.Gradients);
+    }
+
+    public static void CheckDesigns()
+    {
+        GameState.NumDesigns = GetFileCount(DataPath.Designs);
+    }
+
+    public static (int Width, int Height) GetResolutionSize(byte resolution)
+    {
+        return resolution switch
+        {
+            1 => (1920, 1080),
+            2 => (1680, 1050),
+            3 => (1600, 900),
+            4 => (1440, 900),
+            5 => (1440, 1050),
+            6 => (1366, 768),
+            7 => (1360, 1024),
+            8 => (1360, 768),
+            9 => (1280, 1024),
+            10 => (1280, 800),
+            11 => (1280, 768),
+            12 => (1280, 720),
+            13 => (1120, 864),
+            14 => (1024, 768),
+            _ => (1280, 720)
+        };
+    }
+
+    public static void ClearGameData()
+    {
+        Map.ClearMap();
+        Map.ClearMapNpcs();
+        Map.ClearMapItems();
+        Database.ClearNpcs();
+        MapResource.ClearResources();
+        Item.ClearItems();
+        Shop.ClearShops();
+        Database.ClearSkills();
+        Animation.ClearAnimations();
+        Projectile.ClearProjectile();
+        Database.ClearJobs();
+        Moral.ClearMorals();
+        Bank.ClearBanks();
+        Party.ClearParty();
+
+        for (var i = 0; i < Constant.MaxPlayers; i++)
+            Player.ClearPlayer(i);
+
+        Animation.ClearAnimInstances();
+        Autotile.ClearAutotiles();
+
+        // clear chat
+        for (var i = 0; i < Constant.ChatLines; i++)
+            Data.Chat[i].Text = "";
+    }
+
+    public static int GetFileCount(string folderPath)
+    {
+        // folderPath is expected to be an absolute directory path (e.g., DataPath.Resources)
+        if (Directory.Exists(folderPath))
+        {
+            return Directory.GetFiles(folderPath, "*.png").Length; // Adjust for other formats if needed
+        }
+        else
+        {
+            Console.WriteLine($"Folder not found: {folderPath}");
+            return 0;
+        }
+    }
+
+    public static void CacheMusic()
+    {
+        Sound.MusicCache = new string[Directory.GetFiles(DataPath.Music, "*" + SettingsManager.Instance.MusicExt).Count() + 1];
+        var files = Directory.GetFiles(DataPath.Music, "*" + SettingsManager.Instance.MusicExt);
+        var maxNum = Directory.GetFiles(DataPath.Music, "*" + SettingsManager.Instance.MusicExt).Count().ToString();
+        var counter = 0;
+
+        foreach (var fileName in files)
+        {
+            Sound.MusicCache[counter] = System.IO.Path.GetFileName(fileName);
+            counter = counter + 1;
+        }
+    }
+
+    public static void CacheSound()
+    {
+        Sound.SoundCache = new string[Directory.GetFiles(DataPath.Sounds, "*" + SettingsManager.Instance.SoundExt).Count() + 1];
+        var files = Directory.GetFiles(DataPath.Sounds, "*" + SettingsManager.Instance.SoundExt);
+        var maxNum = Directory.GetFiles(DataPath.Sounds, "*" + SettingsManager.Instance.SoundExt).Count().ToString();
+        var counter = 0;
+
+        foreach (var fileName in files)
+        {
+            Sound.SoundCache[counter] = System.IO.Path.GetFileName(fileName);
+            counter = counter + 1;
+        }
+    }
+
+    public static void GameInit()
+    {
+        // Send a request to the server to open the admin menu if the user wants it.
+        if (SettingsManager.Instance.OpenAdminPanelOnLogin == true)
+        {
+            if (GetPlayerAccess(GameState.MyIndex) > 0)
+            {
+                Sender.SendRequestAdmin();
+            }
+        }
+    }
+
+    public static void DestroyGame()
+    {
+        // Signal game to stop; let threads unwind gracefully
+        GameState.InGame = false;
+        GameState.InMenu = false;
+        try { Sound.FreeBass(); } catch { }
+        try { Network.Stop(); } catch { }
+        // Let the hosting application decide process exit
+    }
+
+    // Get the shifted version of a digit key (for symbols)
+    public static char GetShiftedDigit(char digit)
+    {
+        return digit switch
+        {
+            '1' => '!',
+            '2' => '@',
+            '3' => '#',
+            '4' => '$',
+            '5' => '%',
+            '6' => '^',
+            '7' => '&',
+            '8' => '*',
+            '9' => '(',
+            '0' => ')',
+            _ => digit
+        };
+    }
+
+    public static int IsEq(long startX, long startY)
+    {
+        var equipmentCount = Enum.GetValues<Equipment>().Length;
+
+        for (var i = 0; i < equipmentCount; i++)
+        {
+            if (GetPlayerEquipment(GameState.MyIndex, (Equipment) i) < 0)
+            {
+                continue;
+            }
+
+            Type.Rect rec;
+
+            rec.Top = startY + GameState.EqTop + GameState.SizeY * (i / GameState.EqColumns);
+            rec.Bottom = rec.Top + GameState.SizeY;
+            rec.Left = startX + GameState.EqLeft + (GameState.EqOffsetX + GameState.SizeX) * (i % GameState.EqColumns);
+            rec.Right = rec.Left + GameState.SizeX;
+
+            if (GameState.CurMouseX >= rec.Left && GameState.CurMouseX <= rec.Right &&
+                GameState.CurMouseY >= rec.Top && GameState.CurMouseY <= rec.Bottom)
+            {
+                return i;
+            }
+        }
+
+        return 0;
+    }
+
+    public static int IsInv(long startX, long startY)
+    {
+        for (var i = 0; i < Constant.MaxInv; i++)
+        {
+            if (GetPlayerInv(GameState.MyIndex, i) < 0)
+            {
+                continue;
+            }
+
+            Type.Rect rec;
+                
+            rec.Top = startY + GameState.InvTop + (GameState.InvOffsetY) * (i / GameState.InvColumns);
+            rec.Bottom = rec.Top;
+            rec.Left = startX + GameState.InvLeft + (GameState.InvOffsetX) * (i % GameState.InvColumns);
+            rec.Right = rec.Left;
+
+            if (GameState.CurMouseX >= rec.Left && GameState.CurMouseX <= rec.Right && 
+                GameState.CurMouseY >= rec.Top && GameState.CurMouseY <= rec.Bottom)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    public static int IsSkill(long startX, long startY)
+    {
+        int isSkill = default;
+        Type.Rect tempRec;
+        int i;
+
+        for (i = 0; i < Constant.MaxPlayerSkills; i++)
+        {
+            if (Data.Player[GameState.MyIndex].Skill[(int) i].Num >= 0)
+            {
+                tempRec.Top = startY + GameState.SkillTop + (GameState.SkillOffsetY + GameState.SizeY) * (i / GameState.SkillColumns);
+                tempRec.Bottom = tempRec.Top + GameState.SizeY;
+                tempRec.Left = startX + GameState.SkillLeft + (GameState.SkillOffsetX + GameState.SizeX) * (i % GameState.SkillColumns);
+                tempRec.Right = tempRec.Left + GameState.SizeX;
+
+                if (GameState.CurMouseX >= tempRec.Left & GameState.CurMouseX <= tempRec.Right)
+                {
+                    if (GameState.CurMouseY >= tempRec.Top & GameState.CurMouseY <= tempRec.Bottom)
+                    {
+                        isSkill = i;
+                        return isSkill;
+                    }
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    public static int IsBank(long startX, long startY)
+    {
+        int isBank = default;
+        Type.Rect tempRec;
+
+        for (var i = 0; i < Constant.MaxBank; i++)
+        {
+            if (GetBank(GameState.MyIndex, i) >= 0)
+            {
+                tempRec.Top = startY + GameState.BankTop + (GameState.BankOffsetY + GameState.SizeY) * (i / GameState.BankColumns);
+                tempRec.Bottom = tempRec.Top + GameState.SizeY;
+                tempRec.Left = startX + GameState.BankLeft + (GameState.BankOffsetX + GameState.SizeX) * (i % GameState.BankColumns);
+                tempRec.Right = tempRec.Left + GameState.SizeX;
+
+                if (GameState.CurMouseX >= tempRec.Left & GameState.CurMouseX <= tempRec.Right)
+                {
+                    if (GameState.CurMouseY >= tempRec.Top & GameState.CurMouseY <= tempRec.Bottom)
+                    {
+                        isBank = i;
+                        return isBank;
+                    }
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    public static int IsShop(long startX, long startY)
+    {
+        int isShop = default;
+        Type.Rect tempRec;
+        int i;
+
+        for (i = 0; i < Constant.MaxTrades; i++)
+        {
+            tempRec.Top = startY + GameState.ShopTop + (GameState.ShopOffsetY + GameState.SizeY) * (i / GameState.ShopColumns);
+            tempRec.Bottom = tempRec.Top + GameState.SizeY;
+            tempRec.Left = startX + GameState.ShopLeft + (GameState.ShopOffsetX + GameState.SizeX) * (i % GameState.ShopColumns);
+            tempRec.Right = tempRec.Left + GameState.SizeX;
+
+            if (GameState.CurMouseX >= tempRec.Left & GameState.CurMouseX <= tempRec.Right)
+            {
+                if (GameState.CurMouseY >= tempRec.Top & GameState.CurMouseY <= tempRec.Bottom)
+                {
+                    isShop = i;
+                    return isShop;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    public static int IsTrade(long startX, long startY)
+    {
+        int isTrade = default;
+        Type.Rect tempRec;
+        int i;
+
+        for (i = 0; i < Constant.MaxInv; i++)
+        {
+            tempRec.Top = startY + GameState.TradeTop + (GameState.TradeOffsetY + GameState.SizeY) * (i / GameState.TradeColumns);
+            tempRec.Bottom = tempRec.Top + GameState.SizeY;
+            tempRec.Left = startX + GameState.TradeLeft + (GameState.TradeOffsetX + GameState.SizeX) * (i % GameState.TradeColumns);
+            tempRec.Right = tempRec.Left + GameState.SizeX;
+
+            if (GameState.CurMouseX >= tempRec.Left & GameState.CurMouseX <= tempRec.Right)
+            {
+                if (GameState.CurMouseY >= tempRec.Top & GameState.CurMouseY <= tempRec.Bottom)
+                {
+                    isTrade = i;
+                    return isTrade;
+                }
+            }
+        }
+
+        return -1;
+    }
+}

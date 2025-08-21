@@ -1,0 +1,4 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Style Texture="Backgrounds.png">
+    <Part Name="Background" TextureRect="0, 32, 12, 12" NinePatchRect="4, 4, 4, 4"/>
+</Style>

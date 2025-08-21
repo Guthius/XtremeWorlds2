@@ -1,4 +1,4 @@
-﻿namespace Client.Net;
+﻿namespace XtremeWorlds.Client.Net;
 
 public interface INetworkEventHandler
 {

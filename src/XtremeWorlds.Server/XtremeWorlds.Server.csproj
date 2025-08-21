@@ -2,8 +2,6 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <RootNamespace>Server</RootNamespace>
-        <ApplicationIcon>Resources\Icon.ico</ApplicationIcon>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -27,7 +25,6 @@
         <PackageReference Include="Serilog.Sinks.Console"/>
         <PackageReference Include="Serilog.Sinks.File"/>
         <PackageReference Include="Npgsql"/>
-        <PackageReference Include="CS-Script"/>
         <PackageReference Include="Newtonsoft.Json"/>
     </ItemGroup>
 
@@ -40,11 +37,13 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
-
+    
     <ItemGroup>
-        <Compile Update="Database\Script.cs">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Compile>
+      <Folder Include="Services\Accounts\" />
+    </ItemGroup>
+    
+    <ItemGroup>
+      <_DeploymentManifestIconFile Remove="Resources\Icon.ico" />
     </ItemGroup>
 
 </Project>

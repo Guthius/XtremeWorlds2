@@ -1,43 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Window Name="winLogin" Caption="Login"
-        Size="276, 212"
-        Icon="45" IconOffset="3, 5"
-        Design="WindowNormal"
-        StartPosition="CenterScreen">
+<Window Name="winLogin" Caption="Login" Size="280, 250" Icon="45" IconOffset="3, 5" StartPosition="CenterScreen">
+    <PictureBox Position="5, 25" Size="270, 220" Style="Parchment"/>
 
-    <PictureBox Position="6, 26" Size="264, 180" Design="Parchment"/>
+    <!-- Username Input -->
+    <Label Text="Username" Position="60, 35" Size="160, 15" Align="Center"/>
+    <TextBox Name="txtUsername" Position="60, 55" Size="160, 25"/>
 
-    <PictureBox Position="67, 43" Size="142, 9" Design="BlackOval"/>
-    <PictureBox Position="67, 79" Size="142, 9" Design="BlackOval"/>
+    <!-- Password Input -->
+    <Label Text="Password" Position="60, 85" Size="160, 15" Align="Center"/>
+    <TextBox Name="txtPassword" Position="60, 105" Size="160, 25" Censor="True"/>
 
-    <Label Text="Username" Position="72, 39" Size="142, 10" Align="Center"/>
-    <TextBox Name="txtUsername" Position="67, 55" Size="142, 19"/>
+    <!-- Save Username -->
+    <CheckBox Name="chkSaveUsername" Text="Save Username?" Position="60, 140" Size="160, 15"/>
 
-    <Label Text="Password" Position="72, 75" Size="142, 10" Align="Center"/>
-    <TextBox Name="txtPassword" Position="67, 86" Size="142, 19" Censor="True"/>
+    <!-- Buttons -->
+    <Button Name="btnAccept" Text="Accept" Position="60, 165" Size="75, 25"/>
+    <Button Name="btnExit" Text="Exit" Position="145, 165" Size="75, 25" Style="ButtonRed"/>
+    <Button Name="btnRegister" Text="Register Account" Position="15, -40" Size="250, 25"/>
 
-    <CheckBox Name="chkSaveUsername" Text="Save Username?"
-              Position="67, 114" Size="142, 10"
-              Design="CheckboxNormal"/>
-
-    <Button Name="btnAccept" Text="Accept"
-            Position="67, 134" Size="67, 22"
-            Design="Green"
-            DesignHover="GreenHover"
-            DesignMouseDown="GreenClick"/>
-
-    <Button Name="btnExit" Text="Exit"
-            Position="142, 134" Size="67, 22"
-            Design="Red"
-            DesignHover="RedHover"
-            DesignMouseDown="RedClick"/>
-
-    <Button Name="btnRegister" Text="Register Account"
-            Position="12, -35" Size="252, 22"
-            Design="Green"
-            DesignHover="GreenHover"
-            DesignMouseDown="GreenClick"/>
-
-    <Button Name="btnClose" Position="-19, 5" Size="16, 16" Image="8" ImageHover="9" ImageMouseDown="10"/>
-
+    <Button Name="btnClose" Position="-20, 6" Size="16, 16" Style="ButtonClose"/>
 </Window>

@@ -1,4 +1,4 @@
-﻿namespace Server.Net;
+﻿namespace XtremeWorlds.Server.Net;
 
 public abstract class NetworkService<TSession> : INetworkService<TSession>
 {
@@ -15,7 +15,7 @@ public abstract class NetworkService<TSession> : INetworkService<TSession>
     }
 
     /// <inheritdoc />
-    public virtual Task OnBytesReceivedAsync(TSession session, ReadOnlySpan<byte> bytes, CancellationToken cancellationToken)
+    public virtual Task OnBytesReceivedAsync(TSession session, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
     {
         return Task.CompletedTask;
     }

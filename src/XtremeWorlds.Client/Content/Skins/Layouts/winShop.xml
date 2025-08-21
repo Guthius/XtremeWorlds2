@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winCharacter" Caption="Shop"
+        Size="278, 293" Style="WindowEmpty"
+        Icon="17" IconOffset="2, 5"
+        StartPosition="CenterScreen"
+        Visible="False">
+
+    <Button Name="btnClose" Position="-19, 5" Size="16, 16" Style="ButtonClose"/>
+
+    <PictureBox Name="picParchment" Position="6, 215" Size="266, 50" Style="Parchment"/>
+
+    <PictureBox Name="picItemBG" Position="13, 222" Size="36, 36" Image="30"/> <!-- TODO: Item -->
+    <PictureBox Name="picItem" Position="15, 224" Size="32, 32"/>
+
+    <Button Name="btnBuy" Text="Buy" Position="190, 228" Size="70, 24"/>
+    <Button Name="btnSell" Text="Buy" Position="190, 228" Size="70, 24" Style="ButtonRed" Visible="False"/>
+
+    <CheckBox Name="CheckboxBuying" Position="173, 265" Size="49, 20" Design="CheckboxBuying"/>
+    <CheckBox Name="CheckboxSelling" Position="222, 265" Size="49, 20" Design="CheckboxSelling"/>
+
+    <Label Name="lblName" Text="Test Item" Position="56, 226" Size="300, 10"/>
+    <Label Name="lblCost" Text="1000g" Position="56, 240" Size="300, 10"/>
+
+</Window>

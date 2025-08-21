@@ -1,13 +1,16 @@
 ﻿using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
-using Client.Game.UI;
-using Core;
 using Core.Globals;
 using Core.Net;
+using Core.Net.Protocol.FromClient;
+using XtremeWorlds.Client.Features;
+using XtremeWorlds.Client.Features.Objects;
+using XtremeWorlds.Client.Features.States;
+using XtremeWorlds.Client.Features.UI;
 using static Core.Globals.Command;
 
-namespace Client.Net;
+namespace XtremeWorlds.Client.Net;
 
 public static class Sender
 {
@@ -28,12 +31,7 @@ public static class Sender
 
     public static void SendUseChar(byte slot)
     {
-        var packetWriter = new PacketWriter(5);
-
-        packetWriter.WriteEnum(Packets.ClientPackets.CUseChar);
-        packetWriter.WriteByte(slot);
-
-        Network.Send(packetWriter);
+        Network.Send(new SelectCharacterPacket(slot));
     }
 
     public static void SendDelChar(byte slot)
@@ -979,16 +977,6 @@ public static class Sender
 
         packetWriter.WriteEnum(Packets.ClientPackets.CRequestEditScript);
         packetWriter.WriteInt32(lineNumber);
-
-        Network.Send(packetWriter);
-    }
-
-    public static void SendSaveScript()
-    {
-        var packetWriter = new PacketWriter();
-
-        packetWriter.WriteEnum(Packets.ClientPackets.CSaveScript);
-        packetWriter.WriteString(string.Join(Environment.NewLine, Data.Script.Code));
 
         Network.Send(packetWriter);
     }

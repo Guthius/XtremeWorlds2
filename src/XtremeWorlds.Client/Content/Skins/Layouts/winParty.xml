@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Window Name="winParty"
         Position="4, 78" Size="252, 158"
-        Design="WindowParty"
+        Style="WindowForParty"
         Visible="False" CanDrag="False">
 
     <!-- Party Member 1 -->
@@ -27,5 +27,5 @@
     <PictureBox Name="picBar_HP3" Position="58, 114" Size="173, 9" Image="64"/>
     <PictureBox Name="picEmptyBar_SP3" Position="58, 124" Size="173, 9" Image="63"/>
     <PictureBox Name="picBar_SP3" Position="58, 124" Size="173, 9" Image="65"/>
-    
+
 </Window>

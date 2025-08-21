@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winTrade" Caption="Trading with [Name]"
+        Size="412, 386" Icon="112" IconOffset="2, 5" Visible="False"
+        CanDrag="False" Style="WindowEmpty"
+        StartPosition="CenterScreen">
+
+    <Button Name="btnClose" Position="-19, 5" Size="16, 16" Style="ButtonClose"/>
+
+    <PictureBox Name="picParchment" Position="10, 312" Size="392, 66" Style="Parchment"/>
+
+    <PictureBox Name="picShadow" Position="36, 30" Size="142, 9" Style="Parchment"/>
+    <Label Name="lblYourTrade" Text="Robin's Offer" Position="36, 27" Size="142, 9" Algin="Center"/>
+
+    <PictureBox Name="picShadow" Position="236, 30" Size="142, 9" Style="Parchment"/>
+    <Label Name="lblTheirTrade" Text="Richard's Offer" Position="236, 27" Size="142, 9" Algin="Center"/>
+
+    <Button Name="btnAccept" Text="Accept" Position="134, 340" Size="68, 24"/>
+    <Button Name="btnDecline" Text="Decline" Position="210, 340" Size="68, 24" Style="ButtonRed"/>
+
+    <Label Name="lblStatus" Position="114, 322" Size="184, 10" Algin="Center"/>
+    <Label Name="lblBlank" Text="Total Value" Position="25, 330" Size="100, 10" Algin="Center"/>
+
+    <Label Name="lblYourValue" Text="52,812g" Position="25, 344" Size="100, 10" Algin="Center"/>
+    <PictureBox Name="picYour" Position="14, 46" Size="184, 260"/>
+
+    <Label Name="lblTheirValue" Text="12,531g" Position="285, 344" Size="100, 10" Algin="Center"/>
+    <PictureBox Name="picTheir" Position="214, 46" Size="184, 260"/>
+    
+</Window>

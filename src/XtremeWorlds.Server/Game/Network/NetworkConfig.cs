@@ -1,10 +1,8 @@
-﻿using Core;
-using Core.Globals;
-using Server.Game;
-using Server.Game.Net;
+﻿using Core.Globals;
+using XtremeWorlds.Server.Game.Net;
 using static Core.Globals.Command;
 
-namespace Server;
+namespace XtremeWorlds.Server.Game.Network;
 
 public static class NetworkConfig
 {
@@ -53,7 +51,7 @@ public static class NetworkConfig
                     continue;
                 }
 
-                await Player.LeftGame(otherPlayerId);
+                await Objects.Player.LeftGame(otherPlayerId);
                 break;
             }
         }
@@ -65,7 +63,7 @@ public static class NetworkConfig
         if (Data.Player[session.Id].Name.Length > 0)
         {
             // we have a char!
-            Player.HandleUseChar(session);
+            Objects.Player.HandleUseChar(session);
         }
         else
         {

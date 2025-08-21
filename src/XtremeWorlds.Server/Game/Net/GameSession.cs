@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
-using Server.Net;
+using XtremeWorlds.Server.Net;
 
-namespace Server.Game.Net;
+namespace XtremeWorlds.Server.Game.Net;
 
 public sealed class GameSession(int id, INetworkChannel channel, GameSessionManager sessionManager) : IDisposable
 {
@@ -34,7 +34,7 @@ public sealed class GameSession(int id, INetworkChannel channel, GameSessionMana
         return memoryStream.ToArray();
     }
     
-    public void Parse(ReadOnlySpan<byte> bytes)
+    public async Task ParseAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
     {
         var space = BufferSize - _bufferOffset;
         if (bytes.Length > space)
@@ -42,7 +42,7 @@ public sealed class GameSession(int id, INetworkChannel channel, GameSessionMana
             throw new InvalidOperationException("Buffer is full");
         }
 
-        bytes.CopyTo(_buffer.AsSpan(_bufferOffset));
+        bytes.Span.CopyTo(_buffer.AsSpan(_bufferOffset));
 
         _bufferOffset += bytes.Length;
         if (_bufferOffset == 0)
@@ -50,7 +50,7 @@ public sealed class GameSession(int id, INetworkChannel channel, GameSessionMana
             return;
         }
 
-        var count = _parser.Parse(this, _buffer.AsMemory(0, _bufferOffset));
+        var count = await _parser.ParseAsync(this, _buffer.AsMemory(0, _bufferOffset), cancellationToken);
         if (count == 0)
         {
             return;

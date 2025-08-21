@@ -3,8 +3,6 @@
     <PropertyGroup>
         <TargetFramework>net9.0-windows</TargetFramework>
         <OutputType>Exe</OutputType>
-        <RootNamespace>Client</RootNamespace>
-        <ApplicationIcon>Icon.ico</ApplicationIcon>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <MonoGamePlatform>OpenGL</MonoGamePlatform>
     </PropertyGroup>
@@ -36,18 +34,14 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Eto.Forms"/>
-        <PackageReference Include="Eto.Platform.Gtk"/>
-        <PackageReference Include="Eto.Platform.Windows"/>
+        <PackageReference Include="FontStashSharp.MonoGame" />
         <PackageReference Include="ManagedBass"/>
         <PackageReference Include="ManagedBass.Midi"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting"/>
         <PackageReference Include="MonoGame.Content.Builder.Task"/>
         <PackageReference Include="MonoGame.Framework.Content.Pipeline"/>
         <PackageReference Include="MonoGame.Framework.DesktopGL"/>
         <PackageReference Include="MonoGame.Library.SDL"/>
-        <PackageReference Include="Ryujinx.SDL2-CS"/>
-        <PackageReference Include="SDL2-CS"/>
-        <PackageReference Include="CS-Script"/>
         <PackageReference Include="Serilog"/>
         <PackageReference Include="Serilog.Sinks.Console"/>
     </ItemGroup>

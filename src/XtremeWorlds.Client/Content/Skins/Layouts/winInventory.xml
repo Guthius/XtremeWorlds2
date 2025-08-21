@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winInventory" Caption="Inventory"
+        Size="202, 319" Style="WindowEmpty"
+        Icon="1" IconOffset="2, 7"
+        StartPosition="CenterScreen"
+        Visible="False">
+    
+    <!-- TODO: this needs proper rendering... picBlank should be a canvas? -->
+    
+    <Button Name="btnClose" Position="-19, 5" Size="16, 16" Style="ButtonClose"/>
+    
+    <PictureBox Name="picBlank" Position="8, 293" Size="186, 18" Image="Gui/67.png"/>
+    
+</Window>

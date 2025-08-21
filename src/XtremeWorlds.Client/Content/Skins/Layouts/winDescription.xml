@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winDescription" Size="193, 142" Style="Tooltip" CanDrag="False" Visible="False">
+
+    <Label Name="lblName" Text="Flame Sword" Position="8, 12" Size="177, 10" Align="Center"/>
+
+    <PictureBox Name="picSprite"
+                Position="18, 32" Size="68, 68"
+                Style="TooltipPicture"/>
+
+    <PictureBox Name="picSep" Position="96, 28" Size="0, 92" Image="44.png"/> <!-- TODO: Image path... -->
+
+    <Label Name="lblJob" Text="Warrior" Position="5, 102" Size="92, 10" Align="Center"/>
+    <Label Name="lblLevel" Text="Level 20" Position="5, 114" Size="92, 10" Align="Center"/>
+
+    <PictureBox Name="picBar" Position="19, 114" Size="66, 12" Visible="False" Image="45.png"/> <!-- TODO: Image path... -->
+
+</Window>

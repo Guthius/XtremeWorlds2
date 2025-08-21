@@ -1,4 +1,4 @@
-﻿namespace Server.Net;
+﻿namespace XtremeWorlds.Server.Net;
 
 public interface INetworkService<in TSession>
 {
@@ -22,5 +22,5 @@ public interface INetworkService<in TSession>
     /// <param name="session">The session associated with the remote client.</param>
     /// <param name="bytes">The bytes received.</param>
     /// <param name="cancellationToken"></param>
-    Task OnBytesReceivedAsync(TSession session, ReadOnlySpan<byte> bytes, CancellationToken cancellationToken);
+    Task OnBytesReceivedAsync(TSession session, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken);
 }

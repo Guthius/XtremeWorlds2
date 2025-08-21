@@ -1,8 +1,7 @@
-﻿using Core;
-using Microsoft.Extensions.Hosting;
-using static Core.Globals.Command;
+﻿using Microsoft.Extensions.Hosting;
+using XtremeWorlds.Server.Game;
 
-namespace Server.Services;
+namespace XtremeWorlds.Server.Services;
 
 public sealed class ConsoleInputService : BackgroundService
 {

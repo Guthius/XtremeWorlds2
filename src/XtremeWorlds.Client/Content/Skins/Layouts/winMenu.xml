@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winMenu"
+        Position="-229, -31" Size="229, 30"
+        Visible="False" CanDrag="False"
+        ShowTitleBar="False" Style="WindowBlank"
+        Clickthrough="True">
+
+    <PictureBox Position="0, 5" Size="228, 20" Style="Wood"/>
+
+    <Button Name="btnChar"
+            Position="8, 0" Size="29, 29"
+            Icon="Icons/Menu_Character.png"
+            IconOffset="-1, -2"
+            Tooltip="Character (C)"/>
+
+    <Button Name="btnInv"
+            Position="44, 0" Size="29, 29"
+            Icon="Icons/Menu_Inventory.png"
+            IconOffset="-1, -2"
+            Tooltip="Inventory (I)"/>
+
+    <Button Name="btnSkills"
+            Position="82, 0" Size="29, 29"
+            Icon="Icons/Menu_Skills.png"
+            IconOffset="-1, 1"
+            Tooltip="Skills (K)"/>
+
+    <Button Name="btnMap" Position="119, 0" Size="29, 29" Icon="Icons/Menu_Map.png" IconOffset="-1, -1"/>
+    <Button Name="btnGuild" Position="155, 0" Size="29, 29" Icon="Icons/Menu_Guild.png" IconOffset="-1, -1"/>
+    <Button Name="btnQuest" Position="190, 0" Size="29, 29" Icon="Icons/Menu_Quest.png" IconOffset="-1, -2"/>
+
+</Window>

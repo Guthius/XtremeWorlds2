@@ -3,7 +3,7 @@ using System.Net.Sockets;
 using System.Threading.Channels;
 using Serilog;
 
-namespace Client.Net;
+namespace XtremeWorlds.Client.Net;
 
 public sealed class NetworkClient
 {
@@ -18,7 +18,6 @@ public sealed class NetworkClient
 
     public async Task StartAsync(string hostname, int port, INetworkEventHandler eventHandler, CancellationToken cancellationToken)
     {
-        // Ensure only a single runner loop
         if (Interlocked.Exchange(ref _started, true))
         {
             return;
@@ -42,6 +41,7 @@ public sealed class NetworkClient
                     });
                     
                     tcpClient = new TcpClient();
+                    tcpClient.NoDelay = true;
 
                     var connect = tcpClient.ConnectAsync(hostname, port, cancellationToken).AsTask();
                     var timeout = Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);

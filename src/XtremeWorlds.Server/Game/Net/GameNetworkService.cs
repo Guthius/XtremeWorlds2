@@ -1,8 +1,8 @@
 ﻿using System.Security.Cryptography;
-using Server.Game.Net.Protocol;
-using Server.Net;
+using XtremeWorlds.Server.Game.Net.Protocol;
+using XtremeWorlds.Server.Net;
 
-namespace Server.Game.Net;
+namespace XtremeWorlds.Server.Game.Net;
 
 public sealed class GameNetworkService : NetworkService<GameSession>
 {
@@ -16,13 +16,11 @@ public sealed class GameNetworkService : NetworkService<GameSession>
 
     public override async Task OnDisconnectedAsync(GameSession session, CancellationToken cancellationToken)
     {
-        await Server.Player.LeftGame(session.Id);
+        await Objects.Player.LeftGame(session.Id);
     }
 
-    public override Task OnBytesReceivedAsync(GameSession session, ReadOnlySpan<byte> bytes, CancellationToken cancellationToken)
+    public override Task OnBytesReceivedAsync(GameSession session, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
     {
-        session.Parse(bytes);
-
-        return Task.CompletedTask;
+        return session.ParseAsync(bytes, cancellationToken);
     }
 }

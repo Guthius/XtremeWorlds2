@@ -984,9 +984,4 @@ public static class Type
         public int Velocity;
         public int InUse;
     }
-
-    public struct Script
-    {
-        public string[] Code;
-    }
 }

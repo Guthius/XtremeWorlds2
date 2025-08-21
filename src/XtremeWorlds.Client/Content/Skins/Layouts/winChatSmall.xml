@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winChatSmall" 
+        Position="8, 0" Size="174, 356" 
+        Style="WindowBlank"
+        Visible="False">
+    
+    <Label Name="lblMsg" 
+           Text="Press 'Enter' to open chat" 
+           Position="12, 140" 
+           Size="286, 25"/>
+    
+</Window>

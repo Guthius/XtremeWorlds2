@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window Name="winSkills" Caption="Skills"
+        Size="202, 297" Style="WindowEmpty"
+        Icon="109" IconOffset="2, 7"
+        StartPosition="CenterScreen"
+        Visible="False">
+
+    <Button Name="btnClose" Position="-19, 5" Size="16, 16" Style="ButtonClose"/>
+
+</Window>

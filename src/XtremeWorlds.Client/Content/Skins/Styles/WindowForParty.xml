@@ -1,0 +1,4 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Style Texture="WindowForParty.png">
+    <Part Name="WindowBack" TextureRect="0, 0, 27, 27" NinePatchRect="12, 12, 3, 3"/>
+</Style>

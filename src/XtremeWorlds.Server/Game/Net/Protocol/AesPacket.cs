@@ -1,7 +1,6 @@
 ﻿using Core.Net;
-using Server.Net;
 
-namespace Server.Game.Net.Protocol;
+namespace XtremeWorlds.Server.Game.Net.Protocol;
 
 public sealed record AesPacket(byte[] Key, byte[] Iv) : IPacket
 {

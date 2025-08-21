@@ -1,20 +1,55 @@
 ﻿using System.IO.Compression;
 using System.Runtime.InteropServices;
+using Core.Net;
 
-namespace Server.Net;
+namespace XtremeWorlds.Server.Net;
 
 public abstract class PacketParser<TPacketId, TSession> where TPacketId : Enum
 {
     private const uint CompressionFlag = 1u << 31;
 
-    private readonly Dictionary<int, Action<TSession, ReadOnlyMemory<byte>>> _handlers = [];
+    private readonly Dictionary<int, Func<TSession, ReadOnlyMemory<byte>, ValueTask>> _handlers = [];
 
-    protected void Bind(TPacketId packetId, Action<TSession, ReadOnlyMemory<byte>> handler)
+    protected void Bind(TPacketId packetId, Func<TSession, ReadOnlyMemory<byte>, ValueTask> handler)
     {
         _handlers[Convert.ToInt32(packetId)] = handler;
     }
 
-    public int Parse(TSession session, ReadOnlyMemory<byte> bytes)
+    protected void Bind(TPacketId packetId, Action<TSession, ReadOnlyMemory<byte>> handler)
+    {
+        Bind(packetId, (session, bytes) =>
+        {
+            handler(session, bytes);
+
+            return ValueTask.CompletedTask;
+        });
+    }
+
+    protected void Bind<TPacket>(TPacketId packetId, Action<TSession, TPacket> handler) where TPacket : IPacket<TPacket>
+    {
+        Bind(packetId, (session, bytes) =>
+        {
+            var packetReader = new PacketReader(bytes);
+            var packet = TPacket.Deserialize(packetReader);
+
+            handler(session, packet);
+
+            return ValueTask.CompletedTask;
+        });
+    }
+
+    protected void Bind<TPacket>(TPacketId packetId, Func<TSession, TPacket, ValueTask> handler) where TPacket : IPacket<TPacket>
+    {
+        Bind(packetId, (session, bytes) =>
+        {
+            var packetReader = new PacketReader(bytes);
+            var packet = TPacket.Deserialize(packetReader);
+
+            return handler(session, packet);
+        });
+    }
+
+    public async Task<int> ParseAsync(TSession session, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
     {
         var totalNumberOfBytes = bytes.Length;
 
@@ -25,14 +60,14 @@ public abstract class PacketParser<TPacketId, TSession> where TPacketId : Enum
             {
                 break;
             }
-            
+
             bytes = bytes[4..];
             if (packetSize == 0)
             {
                 continue;
             }
 
-            Handle(session, bytes[..packetSize]);
+            await Handle(session, bytes[..packetSize]);
 
             bytes = bytes[packetSize..];
         }
@@ -43,11 +78,11 @@ public abstract class PacketParser<TPacketId, TSession> where TPacketId : Enum
         return bytesProcessed;
     }
 
-    private void Handle(TSession session, ReadOnlyMemory<byte> bytes)
+    private ValueTask Handle(TSession session, ReadOnlyMemory<byte> bytes)
     {
         if (bytes.Length < 4)
         {
-            return;
+            return ValueTask.CompletedTask;
         }
 
         var packetId = BitConverter.ToInt32(bytes.Span);
@@ -59,46 +94,39 @@ public abstract class PacketParser<TPacketId, TSession> where TPacketId : Enum
             packetId = (int) (packetId & ~CompressionFlag);
         }
 
-        if (!Enum.IsDefined(typeof(TPacketId), packetId))
+        if (!Enum.IsDefined(typeof(TPacketId), packetId) || !_handlers.TryGetValue(packetId, out var handler))
         {
-            return;
-        }
-
-        if (!_handlers.TryGetValue(packetId, out var handler))
-        {
-            return;
+            return ValueTask.CompletedTask;
         }
 
         if (compressed)
         {
-            HandleCompressed(session, packetData, handler);
-
-            return;
+            return HandleCompressed(session, packetData, handler);
         }
 
-        handler(session, packetData);
+        return handler(session, packetData);
     }
 
-    private static void HandleCompressed(TSession session, ReadOnlyMemory<byte> bytes, Action<TSession, ReadOnlyMemory<byte>> handler)
+    private static ValueTask HandleCompressed(TSession session, ReadOnlyMemory<byte> bytes, Func<TSession, ReadOnlyMemory<byte>, ValueTask> handler)
     {
         if (bytes.Length < 4)
         {
-            return;
+            return ValueTask.CompletedTask;
         }
 
         var decompressedSize = BitConverter.ToInt32(bytes.Span);
         if (decompressedSize == 0)
         {
-            return;
+            return ValueTask.CompletedTask;
         }
 
         var buffer = new byte[decompressedSize];
         if (!Decompress(bytes[4..], buffer))
         {
-            return;
+            return ValueTask.CompletedTask;
         }
 
-        handler(session, buffer.AsMemory());
+        return handler(session, buffer.AsMemory());
     }
 
     private static bool IsCompressed(int packetId)

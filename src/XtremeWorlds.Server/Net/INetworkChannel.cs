@@ -1,4 +1,6 @@
-namespace Server.Net;
+using Core.Net;
+
+namespace XtremeWorlds.Server.Net;
 
 public interface INetworkChannel
 {

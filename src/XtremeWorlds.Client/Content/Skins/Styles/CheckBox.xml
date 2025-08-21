@@ -1,0 +1,5 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Style Texture="Checkboxes.png">
+    <Part Name="CheckBoxUnchecked" TextureRect="0, 0, 16, 16"/>
+    <Part Name="CheckBoxChecked" TextureRect="16, 0, 16, 16"/>
+</Style>
