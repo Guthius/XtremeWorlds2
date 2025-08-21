@@ -1,0 +1,2815 @@
+﻿using System;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using Client.Game.UI;
+using Client.Game.UI.Windows;
+using Client.Net;
+using Core.Configurations;
+using Core.Globals;
+using Microsoft.VisualBasic;
+using Microsoft.VisualBasic.CompilerServices;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using static Core.Globals.Command;
+using Type = Core.Globals.Type;
+
+namespace Client
+{
+    public class GameClient : Microsoft.Xna.Framework.Game
+    {
+        public static GraphicsDeviceManager Graphics;
+        public static SpriteBatch SpriteBatch;
+
+        public static readonly ConcurrentDictionary<string, Texture2D> TextureCache = new();
+        public static readonly ConcurrentDictionary<string, GfxInfo> GfxInfoCache = new();
+
+        private static int _gameFps;
+        private static readonly object FpsLock = new();
+
+        // Safely set FPS with a lock
+        public static void SetFps(int newFps)
+        {
+            lock (FpsLock)
+                _gameFps = newFps;
+        }
+
+        // Safely get FPS with a lock
+        public static int GetFps()
+        {
+            lock (FpsLock)
+                return _gameFps;
+        }
+
+        // State tracking variables
+        // Shared keyboard and mouse states for cross-thread access
+        public static KeyboardState CurrentKeyboardState;
+        public static KeyboardState PreviousKeyboardState;
+        public static MouseState CurrentMouseState;
+        public static MouseState PreviousMouseState;
+
+        // Keep track of the key states to avoid repeated input
+        public static readonly Dictionary<Keys, bool> KeyStates = new();
+
+        // Define a dictionary to store the last time a key was processed
+        public static Dictionary<Keys, DateTime> KeyRepeatTimers = new();
+
+        // Minimum interval (in milliseconds) between repeated key inputs
+        private const byte KeyRepeatInterval = 200;
+
+        // Lock object to ensure thread safety
+        public static readonly object InputLock = new();
+
+        // Track the previous scroll value to compute delta
+        private static readonly object ScrollLock = new();
+
+        private TimeSpan _elapsedTime = TimeSpan.Zero;
+
+        public static RenderTarget2D RenderTarget;
+        public static Texture2D TransparentTexture;
+        public static Texture2D PixelTexture;
+
+        // Add a timer to prevent spam
+        private static DateTime _lastInputTime = DateTime.MinValue;
+        private const int InputCooldown = 250;
+
+        // Handle Escape key to toggle menus
+        private static DateTime _lastMouseClickTime = DateTime.MinValue;
+        private const int MouseClickCooldown = 250;
+        private static DateTime _lastSearchTime = DateTime.MinValue;
+        // Ensure this class exists to store graphic info
+        public class GfxInfo
+        {
+            public int Width;
+            public int Height;
+        }
+
+        public static GfxInfo? GetGfxInfo(string key)
+        {
+            // Check if the key does not end with ".gfxext" and append if needed
+            if (!key.EndsWith(GameState.GfxExt, StringComparison.OrdinalIgnoreCase))
+            {
+                key += GameState.GfxExt;
+            }
+
+            // Retrieve the texture
+            var texture = GetTexture(key);
+
+            GfxInfo result = null;
+            if (!GfxInfoCache.TryGetValue(key, out result))
+            {
+                // Log or handle the case where the key is not found in the cache
+                Debug.WriteLine($"Warning: GfxInfo for key '{key}' not found in cache.");
+                return null;
+            }
+
+            return result;
+        }
+        
+        public GameClient()
+        {
+            (GameState.ResolutionWidth, GameState.ResolutionHeight) = General.GetResolutionSize(SettingsManager.Instance.Resolution);
+
+            Graphics = new GraphicsDeviceManager(this);
+
+
+            // Set basic properties for GraphicsDeviceManager
+            ref var withBlock = ref Graphics;
+            withBlock.GraphicsProfile = GraphicsProfile.Reach;
+            withBlock.IsFullScreen = SettingsManager.Instance.Fullscreen;
+            withBlock.PreferredBackBufferWidth = GameState.ResolutionWidth;
+            withBlock.PreferredBackBufferHeight = GameState.ResolutionHeight;
+            withBlock.SynchronizeWithVerticalRetrace = SettingsManager.Instance.Vsync;
+            IsFixedTimeStep = false;
+            withBlock.PreferHalfPixelOffset = true;
+            withBlock.PreferMultiSampling = true;
+
+            // Add handler for PreparingDeviceSettings
+            Graphics.PreparingDeviceSettings += (sender, args) =>
+            {
+                args.GraphicsDeviceInformation.PresentationParameters.RenderTargetUsage = RenderTargetUsage.PreserveContents;
+                args.GraphicsDeviceInformation.PresentationParameters.MultiSampleCount = 8;
+            };
+
+#if DEBUG
+            IsMouseVisible = true;
+#endif
+            Content.RootDirectory = "Content";
+
+            // Handle Exiting without forcing a hard shutdown
+            Exiting += (s, e) => {
+                // Let General perform graceful shutdown tasks
+                General.DestroyGame();
+                // Also end the Eto UI loop cleanly
+                try { Client.Program.QuitEto(); } catch { }
+            };
+        }
+
+        protected override void Initialize()
+        {
+            Window.Title = SettingsManager.Instance.GameName;
+            // Keep window visible; we'll load heavy content asynchronously.
+
+            // Create the RenderTarget2D with the same size as the screen
+            RenderTarget = new RenderTarget2D(Graphics.GraphicsDevice,
+                Graphics.GraphicsDevice.PresentationParameters.BackBufferWidth,
+                Graphics.GraphicsDevice.PresentationParameters.BackBufferHeight, false,
+                Graphics.GraphicsDevice.PresentationParameters.BackBufferFormat, DepthFormat.Depth24);
+
+            // Apply changes to GraphicsDeviceManager
+            try
+            {
+                Graphics.ApplyChanges();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"GraphicsDevice initialization failed: {ex.Message}");
+                throw;
+            }
+
+            Components.Add(new UIComponent(this));
+
+            base.Initialize();
+        }
+
+        protected override void BeginRun()
+        {
+            base.BeginRun();
+            // Start TCP client after the window has loaded
+            try { _ = Network.Start(); }
+            catch (Exception ex) { Debug.WriteLine($"Network start error: {ex.Message}"); }
+        }
+
+        static void LoadFonts()
+        {
+            // Get all defined font enum values except None (assumed to be 0)
+            var fontValues = Enum.GetValues(typeof(Font));
+            for (var i = 1; i < fontValues.Length; i++)
+                TextRenderer.Fonts[(Font) fontValues.GetValue(i)] = LoadFont(DataPath.Fonts, (Font) fontValues.GetValue(i));
+        }
+
+        protected override void LoadContent()
+        {
+            SpriteBatch = new SpriteBatch(GraphicsDevice);
+
+            TransparentTexture = new Texture2D(GraphicsDevice, 1, 1);
+            TransparentTexture.SetData([Color.White]);
+            PixelTexture = new Texture2D(GraphicsDevice, 1, 1);
+            PixelTexture.SetData([Color.White]);
+
+            LoadFonts();
+            // Kick off heavy startup work on a background thread to avoid freezing the main thread
+            GameState.IsLoading = true;
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    General.Startup();
+                }
+                finally
+                {
+                    GameState.IsLoading = false;
+                }
+            });
+
+            var cursorPath = Path.Combine(DataPath.Misc, "Cursor.png");
+            var cursorTexture = Texture2D.FromFile(Graphics.GraphicsDevice, cursorPath);
+
+            Mouse.SetCursor(MouseCursor.FromTexture2D(cursorTexture, 0, 0));
+        }
+
+        public static SpriteFont LoadFont(string path, Font font)
+        {
+            return General.Client.Content.Load<SpriteFont>(Path.Combine(path, ((int) font).ToString()));
+        }
+
+        public static Color ToXnaColor(System.Drawing.Color drawingColor)
+        {
+            return new Color(drawingColor.R, drawingColor.G, drawingColor.B, drawingColor.A);
+        }
+
+        public static System.Drawing.Color ToDrawingColor(Color xnaColor)
+        {
+            return System.Drawing.Color.FromArgb(xnaColor.A, xnaColor.R, xnaColor.G, xnaColor.B);
+        }
+
+        public static Rectangle GetAspectRatio(int x, int y, int screenWidth, int screenHeight, int texWidth, int texHeight, float targetAspect)
+        {
+            var newAspect = (float) screenWidth / screenHeight;
+
+            int width, height;
+
+            // Scale texture to match the target aspect ratio
+            if (newAspect > targetAspect)
+            {
+                // Texture is wider than target: scale to fit width, adjust height
+                width = texWidth;
+                height = (int) (width / targetAspect);
+            }
+            else
+            {
+                // Texture is taller than target: scale to fit height, adjust width
+                height = texHeight;
+                width = texWidth;
+            }
+
+            // Calculate scaling factors
+            var scaleX = (float) width / texWidth;
+            var scaleY = (float) height / texHeight;
+
+            // Adjust dimensions to fit within screen boundaries
+            if (width > screenWidth)
+            {
+                width = screenWidth;
+                height = (int) (width / targetAspect);
+                scaleX = (float) width / texWidth;
+                scaleY = (float) height / texHeight;
+            }
+
+            if (height > screenHeight)
+            {
+                height = screenHeight;
+                width = (int) (height * targetAspect);
+                scaleX = (float) width / texWidth;
+                scaleY = (float) height / texHeight;
+            }
+
+            var destX = 0;
+            var destY = 0;
+
+            if (newAspect != targetAspect)
+            {
+                // Calculate position offset based on size difference
+                destX = x + (int) ((screenWidth - width) / 2 * scaleX);
+                destY = y + (int) ((screenHeight - height) / 2 * scaleY);
+            }
+            else
+            {
+                // Center the texture in the screen
+                destX = x;
+                destY = y;
+            }
+
+            return new Rectangle(destX, destY, width, height);
+        }
+
+        public static void RenderTexture(ref string path, int dX, int dY, int sX, int sY, int dW, int dH, int sW = 1,
+            int sH = 1, float alpha = 1.0f, byte red = 255, byte green = 255, byte blue = 255)
+        {
+            path = DataPath.EnsureFileExtension(path);
+
+            // Retrieve the texture
+            var texture = GetTexture(path);
+
+            if (texture is null)
+            {
+                return;
+            }
+
+            var (targetWidth, targetHeight) = General.GetResolutionSize(SettingsManager.Instance.Resolution);
+            var targetAspect = (float) targetWidth / targetHeight;
+
+            var destRect = GetAspectRatio(dX, dY, Graphics.PreferredBackBufferWidth, Graphics.PreferredBackBufferHeight, dW, dH, targetAspect);
+            var srcRect = new Rectangle(sX, sY, sW, sH);
+            var color = new Color(red, green, blue, (byte) 255) * alpha;
+
+            SpriteBatch.Draw(texture, destRect, srcRect, color);
+        }
+
+        public static Texture2D GetTexture(string path)
+        {
+            if (!TextureCache.ContainsKey(path))
+            {
+                var texture = LoadTexture(path);
+                return texture;
+            }
+
+            return TextureCache[path];
+        }
+
+        public static Texture2D LoadTexture(string path)
+        {
+            try
+            {
+                // Check if the key does not end with ".gfxext" and append if needed  
+                if (!path.EndsWith(GameState.GfxExt, StringComparison.OrdinalIgnoreCase))
+                {
+                    path += GameState.GfxExt;
+                }
+
+                // Open the file stream with FileShare.Read to allow other processes to read the file  
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    var texture = Texture2D.FromStream(Graphics.GraphicsDevice, stream);
+
+                    // Cache graphics information  
+                    var gfxInfo = new GfxInfo()
+                    {
+                        Width = texture.Width,
+                        Height = texture.Height
+                    };
+                    GfxInfoCache.TryAdd(path, gfxInfo);
+
+                    TextureCache[path] = texture;
+
+                    return texture;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading texture from {path}: {ex.Message}");
+                return null;
+            }
+        }
+
+        protected override void Draw(GameTime gameTime)
+        {
+            Graphics.GraphicsDevice.Clear(Color.Black);
+
+            SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+
+            // Lightweight loading screen while heavy startup is running
+            if (GameState.IsLoading)
+            {
+                var loadingText = "Loading...";
+                if (TextRenderer.Fonts.TryGetValue(Font.Georgia, out var font))
+                {
+                    var size = font.MeasureString(loadingText);
+                    var x = (Graphics.PreferredBackBufferWidth - size.X) / 2f;
+                    var y = (Graphics.PreferredBackBufferHeight - size.Y) / 2f;
+                    SpriteBatch.DrawString(font, loadingText, new Vector2(x, y), Color.White);
+                }
+
+                SpriteBatch.End();
+                base.Draw(gameTime);
+                return;
+            }
+
+            if (GameState.InGame)
+            {
+                Render_Game();
+            }
+            else
+            {
+                Render_Menu();
+            }
+
+            SpriteBatch.End();
+
+            base.Draw(gameTime);
+        }
+
+        protected override void Update(GameTime gameTime)
+        {
+            // During background loading, keep updates minimal and skip input/UI logic
+            if (GameState.IsLoading)
+            {
+                ResetInputStates();
+                base.Update(gameTime);
+                return;
+            }
+            // Ignore input if the window is minimized or inactive
+            if ((!IsActive || Window.ClientBounds.Width == 0) | Window.ClientBounds.Height == 0)
+            {
+                ResetInputStates();
+                base.Update(gameTime);
+                return;
+            }
+
+            lock (InputLock)
+            {
+                UpdateMouseCache();
+                UpdateKeyCache();
+                ProcessInputs();
+            }
+
+            if (GameState.MyEditorType == EditorType.Map)
+            {
+                if (IsKeyStateActive(Keys.Z))
+                {
+                    Editor_Map.MapEditorUndo();
+                }
+
+                if (IsKeyStateActive(Keys.Y))
+                {
+                    Editor_Map.MapEditorRedo();
+                }
+            }
+
+            if (IsKeyStateActive(Keys.F12))
+            {
+                TakeScreenshot();
+            }
+
+            SetFps(_gameFps + 1);
+            _elapsedTime += gameTime.ElapsedGameTime;
+
+            if (_elapsedTime.TotalSeconds >= 1d)
+            {
+                SetFps(0);
+                
+                _elapsedTime = TimeSpan.Zero;
+            }
+
+            Loop.Game();
+
+            base.Update(gameTime);
+        }
+
+        // Reset keyboard and mouse states
+        private static void ResetInputStates()
+        {
+            CurrentKeyboardState = new KeyboardState();
+            PreviousKeyboardState = new KeyboardState();
+            CurrentMouseState = new MouseState();
+            PreviousMouseState = new MouseState();
+        }
+
+        private static void UpdateKeyCache()
+        {
+            // Get the current keyboard state
+            var keyboardState = Keyboard.GetState();
+
+            // Update the previous and current states
+            PreviousKeyboardState = CurrentKeyboardState;
+            CurrentKeyboardState = keyboardState;
+        }
+
+        private static void UpdateMouseCache()
+        {
+            // Get the current mouse state
+            var mouseState = Mouse.GetState();
+
+            // Update the previous and current states
+            PreviousMouseState = CurrentMouseState;
+            CurrentMouseState = mouseState;
+        }
+
+        public static int GetMouseScrollDelta()
+        {
+            lock (ScrollLock)
+                // Calculate the scroll delta between the previous and current states
+                return CurrentMouseState.ScrollWheelValue - PreviousMouseState.ScrollWheelValue;
+        }
+
+        public static bool IsKeyStateActive(Keys key)
+        {
+            if (CanProcessKey(key))
+            {
+                // Check if the key is down in the current keyboard state
+                return CurrentKeyboardState.IsKeyDown(key);
+            }
+
+            return default;
+        }
+
+        public static Tuple<int, int> GetMousePosition()
+        {
+            // Return the current mouse position as a Tuple
+            return new Tuple<int, int>(CurrentMouseState.X, CurrentMouseState.Y);
+        }
+
+        public static bool IsMouseButtonDown(MouseButton button)
+        {
+            switch (button)
+            {
+                case MouseButton.Left:
+                {
+                    return CurrentMouseState.LeftButton == ButtonState.Pressed;
+                }
+                case MouseButton.Right:
+                {
+                    return CurrentMouseState.RightButton == ButtonState.Pressed;
+                }
+                case MouseButton.Middle:
+                {
+                    return CurrentMouseState.MiddleButton == ButtonState.Pressed;
+                }
+
+                default:
+                {
+                    return false;
+                }
+            }
+        }
+
+        public static bool IsMouseButtonUp(MouseButton button)
+        {
+            switch (button)
+            {
+                case MouseButton.Left:
+                {
+                    return CurrentMouseState.LeftButton == ButtonState.Released;
+                }
+                case MouseButton.Right:
+                {
+                    return CurrentMouseState.RightButton == ButtonState.Released;
+                }
+                case MouseButton.Middle:
+                {
+                    return CurrentMouseState.MiddleButton == ButtonState.Released;
+                }
+
+                default:
+                {
+                    return false;
+                }
+            }
+        }
+
+        public static void ProcessInputs()
+        {
+            // Get the mouse position from the cache
+            var mousePos = GetMousePosition();
+            var mouseX = mousePos.Item1;
+            var mouseY = mousePos.Item2;
+
+            // Convert adjusted coordinates to game world coordinates
+            GameState.CurX = (int) Math.Round(GameState.TileView.Left +
+                                              Math.Floor((mouseX + GameState.Camera.Left) / GameState.SizeX));
+            GameState.CurY = (int) Math.Round(GameState.TileView.Top +
+                                              Math.Floor((mouseY + GameState.Camera.Top) / GameState.SizeY));
+
+            // Store raw mouse coordinates for interface interactions
+            GameState.CurMouseX = mouseX;
+            GameState.CurMouseY = mouseY;
+
+            // Check for action keys
+            GameState.VbKeyControl = CurrentKeyboardState.IsKeyDown(Keys.LeftControl);
+            GameState.VbKeyShift = CurrentKeyboardState.IsKeyDown(Keys.LeftShift);
+
+            if (IsKeyStateActive(Keys.F8))
+            {
+                var uiPath = Path.Combine(DataPath.Skins, SettingsManager.Instance.Skin + ".cs");
+
+                if (!File.Exists(uiPath))
+                {
+                    Console.WriteLine($"File not found: {uiPath}");
+                }
+                else
+                {
+                    // Open with default text editor
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = uiPath,
+                        UseShellExecute = true
+                    });
+                }
+            }
+
+            if (IsKeyStateActive(Keys.F5))
+            {
+                UIScript.Load();
+                Gui.Init();
+            }
+
+            // Handle Escape key to toggle menus
+            if (IsKeyStateActive(Keys.Escape))
+            {
+                if (GameState.InMenu)
+                    return;
+
+                // Hide options screen
+                if (Gui.Windows[Gui.GetWindowIndex("winOptions")].Visible)
+                {
+                    Gui.HideWindow("winOptions");
+                    WinComboMenu.Close();
+                    return;
+                }
+
+                // hide/show chat window
+                if (Gui.Windows[Gui.GetWindowIndex("winChat")].Visible)
+                {
+                    Gui.Windows[Gui.GetWindowIndex("winChat")].Controls[Gui.GetControlIndex("winChat", "txtChat")]
+                        .Text = "";
+                    WinChat.Hide();
+                    return;
+                }
+
+                if (Gui.Windows[Gui.GetWindowIndex("winEscMenu")].Visible)
+                {
+                    Gui.HideWindow("winEscMenu");
+                    return;
+                }
+
+                if (Gui.Windows[Gui.GetWindowIndex("winShop")].Visible)
+                {
+                    Shop.CloseShop();
+                    return;
+                }
+
+                if (Gui.Windows[Gui.GetWindowIndex("winBank")].Visible)
+                {
+                    Bank.CloseBank();
+                    return;
+                }
+
+                if (Gui.Windows[Gui.GetWindowIndex("winTrade")].Visible)
+                {
+                    Trade.SendDeclineTrade();
+                    return;
+                }
+
+                if (Gui.Windows[Gui.GetWindowIndex("winInventory")].Visible)
+                {
+                    Gui.HideWindow(Gui.GetWindowIndex("winInventory"));
+                    return;
+                }
+
+                if (Gui.Windows[Gui.GetWindowIndex("winCharacter")].Visible)
+                {
+                    Gui.HideWindow(Gui.GetWindowIndex("winCharacter"));
+                    return;
+                }
+
+                if (Gui.Windows[Gui.GetWindowIndex("winSkills")].Visible)
+                {
+                    Gui.HideWindow(Gui.GetWindowIndex("winSkills"));
+                    return;
+                }
+
+                // show them
+                if (!Gui.Windows[Gui.GetWindowIndex("winChat")].Visible)
+                {
+                    Gui.ShowWindow(Gui.GetWindowIndex("winEscMenu"), true);
+                    return;
+                }
+            }
+
+            if (CurrentKeyboardState.IsKeyDown(Keys.Space))
+            {
+                GameLogic.CheckMapGetItem();
+            }
+
+            if (CurrentKeyboardState.IsKeyDown(Keys.Insert))
+            {
+                Sender.SendRequestAdmin();
+            }
+
+            HandleMouseInputs();
+            HandleActiveWindowInput();
+            HandleTextInput();
+
+            if (GameState.InGame)
+            {
+                // Check for movement keys
+                UpdateMovementKeys();
+
+                HandleHotbarInput();
+
+                // Exit if escape menu is open
+                if (IsWindowVisible("winEscMenu"))
+                    return;
+
+                // Check for input cooldown
+                if (!IsInputCooldownElapsed())
+                    return;
+
+                // Process toggle actions
+                HandleWindowToggle(Keys.I, "winInventory", WinMenu.OnInventoryClick);
+                HandleWindowToggle(Keys.C, "winCharacter", WinMenu.OnCharacterClick);
+                HandleWindowToggle(Keys.K, "winSkills", WinMenu.OnSkillsClick);
+
+                // Handle chat input
+                if (CurrentKeyboardState.IsKeyDown(Keys.Enter))
+                {
+                    if (IsWindowVisible("winChatSmall"))
+                    {
+                        WinChat.Show();
+                        GameState.InSmallChat = false;
+                    }
+                    else
+                    {
+                        GameLogic.HandlePressEnter();
+                    }
+
+                    UpdateLastInputTime();
+                }
+            }
+        }
+
+        // Helper methods
+        private static void UpdateMovementKeys()
+        {
+            GameState.DirUp = CurrentKeyboardState.IsKeyDown(Keys.W) | CurrentKeyboardState.IsKeyDown(Keys.Up);
+            GameState.DirDown = CurrentKeyboardState.IsKeyDown(Keys.S) | CurrentKeyboardState.IsKeyDown(Keys.Down);
+            GameState.DirLeft = CurrentKeyboardState.IsKeyDown(Keys.A) | CurrentKeyboardState.IsKeyDown(Keys.Left);
+            GameState.DirRight = CurrentKeyboardState.IsKeyDown(Keys.D) | CurrentKeyboardState.IsKeyDown(Keys.Right);
+        }
+
+        private static bool IsWindowVisible(string windowName)
+        {
+            return Gui.Windows[Gui.GetWindowIndex(windowName)].Visible;
+        }
+
+        private static bool IsInputCooldownElapsed()
+        {
+            return (DateTime.Now - _lastInputTime).TotalMilliseconds >= InputCooldown;
+        }
+
+        private static bool IsSeartchCooldownElapsed()
+        {
+            return (DateTime.Now - _lastSearchTime).TotalMilliseconds >= InputCooldown;
+        }
+
+        private static void UpdateLastInputTime()
+        {
+            _lastInputTime = DateTime.Now;
+        }
+
+        private static void HandleWindowToggle(Keys key, string windowName, Action toggleAction)
+        {
+            if (CurrentKeyboardState.IsKeyDown(key) && !IsWindowVisible("winChat"))
+            {
+                toggleAction.Invoke();
+                UpdateLastInputTime();
+            }
+        }
+
+        private static void HandleActiveWindowInput()
+        {
+            Keys key;
+
+            // Check if there is an active window and that it is visible.
+            if (Gui.ActiveWindow is not null && Gui.ActiveWindow.Visible)
+            {
+                // Check if an active control exists.
+                if (Gui.ActiveWindow.ActiveControl is not null)
+                {
+                    // Get the active control.
+                    var activeControl = Gui.ActiveWindow.ActiveControl;
+
+                    // Check if the Enter key is active and can be processed.
+                    if (IsKeyStateActive(Keys.Enter))
+                    {
+                        // Handle Enter: Call the control's callback or activate a new control.
+                        //activeControl.OnEnter?.Invoke();
+                    }
+
+                    // Check if the Tab key is active and can be processed
+                    if (IsKeyStateActive(Keys.Tab))
+                    {
+                        Gui.FocusNextControl();
+                    }
+                }
+            }
+        }
+
+        // Handles the hotbar key presses using KeyboardState
+        private static void HandleHotbarInput()
+        {
+            if (GameState.InSmallChat)
+            {
+                // Iterate through hotbar slots and check for corresponding keys
+                for (var i = 0; i < Constant.MaxHotbar; i++)
+                {
+                    // Check if the corresponding hotbar key is pressed
+                    if (CurrentKeyboardState.IsKeyDown((Keys) ((int) Keys.D0 + i)))
+                    {
+                        Sender.SendUseHotbarSlot(i);
+                        return; // Exit once the matching slot is used
+                    }
+                }
+            }
+        }
+
+        private static void HandleTextInput()
+        {
+            // Iterate over all pressed keys  
+            foreach (var key in CurrentKeyboardState.GetPressedKeys())
+            {
+                // Check for special keys and skip processing
+                if (key == Keys.Tab || key == Keys.LeftShift || key == Keys.RightShift || key == Keys.LeftControl ||
+                    key == Keys.RightControl || key == Keys.LeftAlt || key == Keys.RightAlt)
+                {
+                    continue;
+                }
+
+                if (IsKeyStateActive(key))
+                {
+                    // Handle Backspace key separately  
+                    if (key == Keys.Back)
+                    {
+                        var activeControl = Gui.ActiveControl;
+
+                        if (activeControl is not null && activeControl.Visible && activeControl.Text.Length > 0)
+                        {
+                            // Modify the text and update it back in the window  
+                            activeControl.Text = activeControl.Text.Substring(0, activeControl.Text.Length - 1);
+                            Gui.UpdateActiveControl(activeControl);
+                        }
+
+                        continue; // Move to the next key  
+                    }
+
+                    // Convert key to a character, considering Shift key  
+                    char? character = ConvertKeyToChar(key, CurrentKeyboardState.IsKeyDown(Keys.LeftShift));
+
+                    // If the character is valid, update the active control's text  
+                    if (character.HasValue)
+                    {
+                        var activeControl = Gui.ActiveControl;
+
+                        if (activeControl is not null && activeControl.Visible && activeControl.Enabled)
+                        {
+                            var text = activeControl.Text + Conversions.ToString(character.Value);
+                            if (TextRenderer.GetTextWidth(text) < activeControl.Width)
+                            {
+                                // Append character to the control's text  
+                                activeControl.Text += Conversions.ToString(character.Value);
+                                Gui.UpdateActiveControl(activeControl);
+                                continue; // Move to the next key  
+                            }
+                        }
+                    }
+
+                    KeyStates.Remove(key);
+                    KeyRepeatTimers.Remove(key);
+                }
+            }
+        }
+
+        // Check if the key can be processed (with interval-based repeat logic)
+        private static bool CanProcessKey(Keys key)
+        {
+            var now = DateTime.Now;
+            if (CurrentKeyboardState.IsKeyDown(key))
+            {
+                if (IsKeyPressedOnce(key) || !KeyRepeatTimers.ContainsKey(key) ||
+                    (now - KeyRepeatTimers[key]).TotalMilliseconds >= KeyRepeatInterval)
+                {
+                    // If the key is released, remove it from KeyStates and reset the timer
+                    KeyStates.Remove(key);
+                    KeyRepeatTimers.Remove(key);
+                    KeyRepeatTimers[key] = now; // Update the timer for the key
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsKeyPressedOnce(Keys key)
+        {
+            return CurrentKeyboardState.IsKeyDown(key) && PreviousKeyboardState.IsKeyUp(key);
+        }
+
+        // Convert a key to a character (if possible)
+        private static char ConvertKeyToChar(Keys key, bool shiftPressed)
+        {
+            // Handle alphabetic keys
+            if (key >= Keys.A && key <= Keys.Z)
+            {
+                var baseChar = Strings.ChrW(Strings.AscW('A') + ((int) key - (int) Keys.A));
+                return shiftPressed ? baseChar : char.ToLower(baseChar);
+            }
+
+            // Handle numeric keys (0-9)
+            if (key >= Keys.D0 && key <= Keys.D9)
+            {
+                var digit = Strings.ChrW(Strings.AscW('0') + ((int) key - (int) Keys.D0));
+                return shiftPressed ? General.GetShiftedDigit(digit) : digit;
+            }
+
+            // Handle space key
+            if (key == Keys.Space)
+                return ' ';
+
+            // Handle the "/" character (typically mapped to OemQuestion)
+            if (key == Keys.OemQuestion)
+            {
+                return shiftPressed ? '?' : '/';
+            }
+
+            // Ignore unsupported keys (e.g., function keys, control keys)
+            return default;
+        }
+
+        private static void HandleMouseInputs()
+        {
+            HandleMouseClick();
+            HandleScrollWheel();
+        }
+
+        private static void HandleScrollWheel()
+        {
+            // Handle scroll wheel (assuming delta calculation happens elsewhere)
+            var scrollValue = GetMouseScrollDelta();
+            if (scrollValue > 0)
+            {
+                GameLogic.ScrollChatBox(0); // Scroll up
+
+                if (GameState.MyEditorType == EditorType.Map)
+                {
+                    if (CurrentKeyboardState.IsKeyDown(Keys.LeftShift))
+                    {
+                        if (GameState.CurLayer > 0)
+                        {
+                            GameState.CurLayer -= 1;
+                        }
+                    }
+
+                    else if (GameState.CurTileset > 0)
+                    {
+                        GameState.CurTileset -= 1;
+                    }
+                }
+            }
+            else if (scrollValue < 0)
+            {
+                GameLogic.ScrollChatBox(1); // Scroll down
+
+                if (GameState.MyEditorType == EditorType.Map)
+                {
+                    if (CurrentKeyboardState.IsKeyDown(Keys.LeftShift))
+                    {
+                        if (GameState.CurLayer < Enum.GetValues(typeof(MapLayer)).Length)
+                        {
+                            GameState.CurLayer += 1;
+                        }
+                    }
+                    else if (GameState.CurTileset < GameState.NumTileSets)
+                    {
+                        GameState.CurTileset += 1;
+                    }
+                }
+
+                if (scrollValue != 0)
+                {
+                    Gui.HandleInterfaceEvents(ControlState.MouseScroll);
+                }
+            }
+        }
+
+        private static void HandleMouseClick()
+        {
+            var currentTime = Environment.TickCount;
+            
+            // Check for MouseDown event (button pressed)
+            if (IsMouseButtonDown(MouseButton.Left))
+            {
+                if ((DateTime.Now - _lastMouseClickTime).TotalMilliseconds >= MouseClickCooldown)
+                {
+                    Gui.HandleInterfaceEvents(ControlState.MouseDown);
+                    
+                    _lastMouseClickTime = DateTime.Now; // Update last mouse click time
+                    GameState.LastLeftClickTime = currentTime; // Track time for double-click detection
+                    GameState.ClickCount++;
+                }
+
+                if (GameState.ClickCount >= 2)
+                {
+                    Gui.HandleInterfaceEvents(ControlState.DoubleClick);
+                }
+            }
+
+            // Double-click detection for left button
+            if ((DateTime.Now - _lastMouseClickTime).TotalMilliseconds >= GameState.DoubleClickTImer)
+            {
+                GameState.ClickCount = 0;
+                GameState.Info = false;
+            }
+
+            // In-game interactions for left click
+            if (GameState.InGame)
+            {
+                if (GameState.MyEditorType == EditorType.Map)
+                {
+                    Editor_Map.MapEditorMouseDown(GameState.CurX, GameState.CurY, false);
+                }
+
+                if (IsSeartchCooldownElapsed())
+                {
+                    if (IsMouseButtonDown(MouseButton.Left))
+                    {
+                        Player.CheckAttack(true);
+                        Sender.PlayerSearch(GameState.CurX, GameState.CurY, 0);
+                        _lastSearchTime = DateTime.Now;
+                    }
+                }
+
+                // Right-click interactions
+                if (IsMouseButtonDown(MouseButton.Right))
+                {
+                    var slotNum = GameLogic.IsHotbar(
+                        Gui.Windows[Gui.GetWindowIndex("winHotbar")].X,
+                        Gui.Windows[Gui.GetWindowIndex("winHotbar")].Y);
+
+                    if (slotNum >= 0L)
+                    {
+                        Sender.SendDeleteHotbar(slotNum);
+                    }
+
+                    if (GameState.VbKeyShift)
+                    {
+                        // Admin warp if Shift is held and the player has moderator access
+                        if (GetPlayerAccess(GameState.MyIndex) >= (int) AccessLevel.Moderator)
+                        {
+                            Sender.AdminWarp(GameState.CurX, GameState.CurY);
+                        }
+                    }
+                    else
+                    {
+                        // Handle right-click menu
+                        HandleRightClickMenu();
+                    }
+                }
+            }
+        }
+
+        private static void HandleRightClickMenu()
+        {
+            // Loop through all players and display the right-click menu for the matching one
+            for (var i = 0; i < Constant.MaxPlayers; i++)
+            {
+                if (IsPlaying(i) && GetPlayerMap(i) == GetPlayerMap(GameState.MyIndex))
+                {
+                    if (GetPlayerX(i) == GameState.CurX && GetPlayerY(i) == GameState.CurY)
+                    {
+                        // Use current mouse state for the X and Y positions
+                        GameLogic.ShowPlayerMenu(i, CurrentMouseState.X, CurrentMouseState.Y);
+                    }
+                }
+            }
+
+            // Perform player search at the current cursor position
+            Sender.PlayerSearch(GameState.CurX, GameState.CurY, 1);
+        }
+        
+        public static void TakeScreenshot()
+        {
+            // Set the render target to our RenderTarget2D
+            Graphics.GraphicsDevice.SetRenderTarget(RenderTarget);
+
+            // Clear the render target with a transparent background
+            Graphics.GraphicsDevice.Clear(Color.Transparent);
+
+            // Draw everything to the render target
+            General.Client.Draw(new GameTime()); // Assuming Draw handles your game rendering
+
+            // Reset the render target to the back buffer (main display)
+            Graphics.GraphicsDevice.SetRenderTarget(null);
+
+            // Save the contents of the RenderTarget2D to a PNG file
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            using (var stream = new FileStream($"screenshot_{timestamp}.png", FileMode.Create))
+            {
+                RenderTarget.SaveAsPng(stream, RenderTarget.Width, RenderTarget.Height);
+            }
+        }
+
+        // Draw a filled rectangle with an optional outline
+        public static void DrawRectangle(Vector2 position, Vector2 size, Color fillColor, Color outlineColor, float outlineThickness)
+        {
+            // Create a 1x1 white texture for drawing
+            var whiteTexture = new Texture2D(SpriteBatch.GraphicsDevice, 1, 1);
+
+            whiteTexture.SetData([Color.White]);
+
+            // Draw the filled rectangle
+            SpriteBatch.Draw(whiteTexture, new Rectangle(position.ToPoint(), size.ToPoint()), fillColor);
+
+            // Draw the outline if thickness > 0
+            if (outlineThickness > 0f)
+            {
+                // Create the four sides of the outline
+                var left = new Rectangle(position.ToPoint(),
+                    new Point((int) Math.Round(outlineThickness), (int) Math.Round(size.Y)));
+
+                var top = new Rectangle(position.ToPoint(),
+                    new Point((int) Math.Round(size.X), (int) Math.Round(outlineThickness)));
+
+                var right = new Rectangle(
+                    new Point((int) Math.Round(position.X + size.X - outlineThickness), (int) Math.Round(position.Y)),
+                    new Point((int) Math.Round(outlineThickness), (int) Math.Round(size.Y)));
+
+                var bottom =
+                    new Rectangle(
+                        new Point((int) Math.Round(position.X), (int) Math.Round(position.Y + size.Y - outlineThickness)),
+                        new Point((int) Math.Round(size.X), (int) Math.Round(outlineThickness)));
+
+                // Draw the outline rectangles
+                SpriteBatch.Draw(whiteTexture, left, outlineColor);
+                SpriteBatch.Draw(whiteTexture, top, outlineColor);
+                SpriteBatch.Draw(whiteTexture, right, outlineColor);
+                SpriteBatch.Draw(whiteTexture, bottom, outlineColor);
+            }
+
+            // Dispose the texture to free memory
+            whiteTexture.Dispose();
+        }
+
+        private static void DrawOutlineRectangle(int x, int y, int width, int height, Color color, float thickness)
+        {
+            var whiteTexture = new Texture2D(SpriteBatch.GraphicsDevice, 1, 1);
+
+            // Define four rectangles for the outline
+            var left = new Rectangle(x, y, (int) Math.Round(thickness), height);
+            var top = new Rectangle(x, y, width, (int) Math.Round(thickness));
+            var right = new Rectangle((int) Math.Round(x + width - thickness), y, (int) Math.Round(thickness), height);
+            var bottom = new Rectangle(x, (int) Math.Round(y + height - thickness), width, (int) Math.Round(thickness));
+
+            // Draw the outline
+            SpriteBatch.Draw(whiteTexture, left, color);
+            SpriteBatch.Draw(whiteTexture, top, color);
+            SpriteBatch.Draw(whiteTexture, right, color);
+            SpriteBatch.Draw(whiteTexture, bottom, color);
+        }
+
+        public static Color QbColorToXnaColor(int qbColor)
+        {
+            switch (qbColor)
+            {
+                case (int) ColorName.Black:
+                {
+                    return Color.Black;
+                }
+                case (int) ColorName.Blue:
+                {
+                    return Color.Blue;
+                }
+                case (int) ColorName.Green:
+                {
+                    return Color.Green;
+                }
+                case (int) ColorName.Cyan:
+                {
+                    return Color.Cyan;
+                }
+                case (int) ColorName.Red:
+                {
+                    return Color.Red;
+                }
+                case (int) ColorName.Magenta:
+                {
+                    return Color.Magenta;
+                }
+                case (int) ColorName.Brown:
+                {
+                    return Color.Brown;
+                }
+                case (int) ColorName.Gray:
+                {
+                    return Color.LightGray;
+                }
+                case (int) ColorName.DarkGray:
+                {
+                    return Color.Gray;
+                }
+                case (int) ColorName.BrightBlue:
+                {
+                    return Color.LightBlue;
+                }
+                case (int) ColorName.BrightGreen:
+                {
+                    return Color.LightGreen;
+                }
+                case (int) ColorName.BrightCyan:
+                {
+                    return Color.LightCyan;
+                }
+                case (int) ColorName.BrightRed:
+                {
+                    return Color.LightCoral;
+                }
+                case (int) ColorName.Pink:
+                {
+                    return Color.Orchid;
+                }
+                case (int) ColorName.Yellow:
+                {
+                    return Color.Yellow;
+                }
+                case (int) ColorName.White:
+                {
+                    return Color.White;
+                }
+
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(nameof(qbColor), "Invalid QbColor value.");
+                }
+            }
+        }
+
+        public static void DrawEmote(int x2, int y2, int sprite)
+        {
+            Rectangle rec;
+            int x;
+            int y;
+            int anim;
+
+            if (sprite < 1 | sprite > GameState.NumEmotes)
+                return;
+
+            if (GameState.ShowAnimLayers)
+            {
+                anim = 1;
+            }
+            else
+            {
+                anim = 0;
+            }
+
+            rec.Y = 0;
+            rec.Height = GameState.SizeX;
+            rec.X = (int) Math.Round(anim *
+                                     (GetGfxInfo(Path.Combine(DataPath.Emotes, sprite.ToString())).Width /
+                                      2d));
+            rec.Width = (int) Math.Round(GetGfxInfo(Path.Combine(DataPath.Emotes, sprite.ToString())).Width /
+                                         2d);
+
+            x = GameLogic.ConvertMapX(x2);
+            y = GameLogic.ConvertMapY(y2) - (GameState.SizeY + 16);
+
+            var argpath = Path.Combine(DataPath.Emotes, sprite.ToString());
+            RenderTexture(ref argpath, x, y, rec.X, rec.Y, rec.Width, rec.Height);
+        }
+
+        public static void DrawDirections(int x, int y)
+        {
+            Rectangle rec;
+            int i;
+
+            // render grid
+            rec.Y = 24;
+            rec.X = 0;
+            rec.Width = 32;
+            rec.Height = 32;
+
+            var argpath = Path.Combine(DataPath.Misc, "Direction");
+            RenderTexture(ref argpath, GameLogic.ConvertMapX(x * GameState.SizeX),
+                GameLogic.ConvertMapY(y * GameState.SizeY),
+                rec.X, rec.Y, rec.Width, rec.Height, rec.Width, rec.Height);
+
+            // render dir blobs
+            for (i = 0; i < 4; i++)
+            {
+                rec.X = i * 8;
+                rec.Width = 8;
+
+                // find out whether render blocked or not
+                bool LocalIsDirBlocked()
+                {
+                    var argdir = (byte) i;
+                    var n = GameLogic.IsDirBlocked(ref Data.MyMap.Tile[x, y].DirBlock, ref argdir);
+                    return n;
+                }
+
+                if (!LocalIsDirBlocked())
+                {
+                    rec.Y = 8;
+                }
+                else
+                {
+                    rec.Y = 16;
+                }
+
+                rec.Height = 8;
+
+                var argpath1 = Path.Combine(DataPath.Misc, "Direction");
+                RenderTexture(ref argpath1, GameLogic.ConvertMapX(x * GameState.SizeX) + GameState.DirArrowX[i],
+                    GameLogic.ConvertMapY(y * GameState.SizeY) + GameState.DirArrowY[i], rec.X, rec.Y, rec.Width,
+                    rec.Height,
+                    rec.Width, rec.Height);
+            }
+        }
+
+        public static void DrawPaperdoll(int x2, int y2, int sprite, int anim, int spritetop)
+        {
+            Rectangle rec;
+            int x;
+            int y;
+            int width;
+            int height;
+
+            if (sprite < 1 | sprite > GameState.NumPaperdolls)
+                return;
+
+            rec.Y = (int) Math.Round(spritetop *
+                GetGfxInfo(Path.Combine(DataPath.Paperdolls, sprite.ToString())).Height / 4d);
+            rec.Height =
+                (int) Math.Round(GetGfxInfo(Path.Combine(DataPath.Paperdolls, sprite.ToString())).Height /
+                                 4d);
+            rec.X = (int) Math.Round(anim *
+                GetGfxInfo(Path.Combine(DataPath.Paperdolls, sprite.ToString())).Width / 4d);
+            rec.Width = (int) Math.Round(
+                GetGfxInfo(Path.Combine(DataPath.Paperdolls, sprite.ToString())).Width /
+                4d);
+
+            x = GameLogic.ConvertMapX(x2);
+            y = GameLogic.ConvertMapY(y2);
+            width = rec.Right - rec.Left;
+            height = rec.Bottom - rec.Top;
+
+            var argpath = Path.Combine(DataPath.Paperdolls, sprite.ToString());
+            RenderTexture(ref argpath, x, y, rec.X, rec.Y, rec.Width, rec.Height);
+        }
+
+        public static void DrawNpc(int mapNpcNum)
+        {
+            byte anim;
+            int x;
+            int y;
+            int sprite;
+            var spriteLeft = default(int);
+            Rectangle rect;
+            var attackSpeed = 1000;
+
+            // Check if Npc exists
+            if (Data.MyMapNpc[(int) mapNpcNum].Num < 0 ||
+                Data.MyMapNpc[(int) mapNpcNum].Num > Constant.MaxNpcs)
+                return;
+
+            x = (int) Math.Floor((double) Data.MyMapNpc[(int) mapNpcNum].X / 32);
+            y = (int) Math.Floor((double) Data.MyMapNpc[(int) mapNpcNum].Y / 32);
+
+            // Ensure Npc is within the tile view range
+            if (x < GameState.TileView.Left |
+                x > GameState.TileView.Right)
+                return;
+
+            if (y < GameState.TileView.Top |
+                y > GameState.TileView.Bottom)
+                return;
+
+            // Stream Npc if not yet loaded
+            Database.StreamNpc((int) Data.MyMapNpc[(int) mapNpcNum].Num);
+
+            // Get the sprite of the Npc
+            sprite = Data.Npc[(int) Data.MyMapNpc[(int) mapNpcNum].Num].Sprite;
+
+            // Validate sprite
+            if (sprite < 1 | sprite > GameState.NumCharacters)
+                return;
+
+            // Reset animation frame
+            anim = 0;
+
+            // Check for attacking animation
+            if (Data.MyMapNpc[(int) mapNpcNum].AttackTimer + attackSpeed / 2d > General.GetTickCount() &&
+                Data.MyMapNpc[(int) mapNpcNum].Attacking == 1)
+            {
+                anim = 3;
+            }
+            else
+            {
+                anim = (byte) Data.MyMapNpc[(int) mapNpcNum].Steps;
+            }
+
+            // Reset attacking state if attack timer has passed
+            {
+                ref var withBlock = ref Data.MyMapNpc[(int) mapNpcNum];
+                if (withBlock.AttackTimer + attackSpeed < General.GetTickCount())
+                {
+                    withBlock.Attacking = 0;
+                    withBlock.AttackTimer = 0;
+                }
+            }
+
+            // Set sprite sheet position based on direction
+            switch (Data.MyMapNpc[(int) mapNpcNum].Dir)
+            {
+                case (int) Direction.Up:
+                {
+                    spriteLeft = 3;
+                    break;
+                }
+                case (int) Direction.Right:
+                {
+                    spriteLeft = 2;
+                    break;
+                }
+                case (int) Direction.Down:
+                {
+                    spriteLeft = 0;
+                    break;
+                }
+                case (int) Direction.Left:
+                {
+                    spriteLeft = 1;
+                    break;
+                }
+            }
+
+            // Create the rectangle for rendering the sprite
+            rect = new Rectangle(
+                (int) Math.Round(anim *
+                                 (GetGfxInfo(Path.Combine(DataPath.Characters, sprite.ToString())).Width /
+                                  4d)),
+                (int) Math.Round(spriteLeft *
+                                 (GetGfxInfo(Path.Combine(DataPath.Characters, sprite.ToString())).Height /
+                                  4d)),
+                (int) Math.Round(GetGfxInfo(Path.Combine(DataPath.Characters, sprite.ToString())).Width / 4d),
+                (int) Math.Round(GetGfxInfo(Path.Combine(DataPath.Characters, sprite.ToString())).Height /
+                                 4d));
+
+            // Calculate X and Y coordinates for rendering
+            x = (int) Math.Round(Data.MyMapNpc[(int) mapNpcNum].X -
+                                 (GetGfxInfo(Path.Combine(DataPath.Characters, sprite.ToString())).Width /
+                                  4d -
+                                  32d) / 2d);
+
+            if (GetGfxInfo(Path.Combine(DataPath.Characters, sprite.ToString())).Height / 4d > 32d)
+            {
+                // Larger sprites need an offset for height adjustment
+                y = (int) Math.Round(Data.MyMapNpc[(int) mapNpcNum].Y -
+                                     (GetGfxInfo(Path.Combine(DataPath.Characters, sprite.ToString()))
+                                             .Height /
+                                         4d - 32d));
+            }
+            else
+            {
+                // Normal sprite height
+                y = Data.MyMapNpc[(int) mapNpcNum].Y;
+            }
+
+            // Draw shadow and Npc sprite
+            // DrawShadow(x, y + 16)
+            DrawCharacterSprite(sprite, x, y, rect);
+        }
+
+        public static void DrawMapItem(int itemNum)
+        {
+            Rectangle srcrec;
+            Rectangle destrec;
+            int picNum;
+            int x;
+            int y;
+
+            if (Data.MyMapItem[itemNum].Num < 0 | Data.MyMapItem[itemNum].Num > Constant.MaxItems)
+                return;
+
+            Item.StreamItem(Data.MyMapItem[itemNum].Num);
+
+            picNum = Data.Item[Data.MyMapItem[itemNum].Num].Icon;
+
+            if (picNum < 1 | picNum > GameState.NumItems)
+                return;
+
+            ref var withBlock = ref Data.MyMapItem[itemNum];
+
+            if (Math.Floor((double) withBlock.X / 32) < GameState.TileView.Left | Math.Floor((double) withBlock.X / 32) > GameState.TileView.Right)
+                return;
+
+            if (Math.Floor((double) withBlock.Y / 32) < GameState.TileView.Top | Math.Floor((double) withBlock.Y / 32) > GameState.TileView.Bottom)
+                return;
+
+            srcrec = new Rectangle(0, 0, GameState.SizeX, GameState.SizeY);
+            destrec = new Rectangle(GameLogic.ConvertMapX(Data.MyMapItem[itemNum].X * GameState.SizeX),
+                GameLogic.ConvertMapY(Data.MyMapItem[itemNum].Y * GameState.SizeY), GameState.SizeX, GameState.SizeY);
+
+            x = GameLogic.ConvertMapX(Data.MyMapItem[itemNum].X * GameState.SizeX);
+            y = GameLogic.ConvertMapY(Data.MyMapItem[itemNum].Y * GameState.SizeY);
+
+            var argpath = Path.Combine(DataPath.Items, picNum.ToString());
+            RenderTexture(ref argpath, x, y, srcrec.X, srcrec.Y, srcrec.Width, srcrec.Height, srcrec.Width,
+                srcrec.Height);
+        }
+
+        public static void DrawCharacterSprite(int sprite, int x2, int y2, Rectangle sRect)
+        {
+            int x;
+            int y;
+
+            if (sprite < 1 | sprite > GameState.NumCharacters)
+                return;
+
+            x = GameLogic.ConvertMapX(x2);
+            y = GameLogic.ConvertMapY(y2);
+
+            var argpath = Path.Combine(DataPath.Characters, sprite.ToString());
+            RenderTexture(ref argpath, x, y, sRect.X, sRect.Y, sRect.Width, sRect.Height, sRect.Width, sRect.Height);
+        }
+
+        public static void DrawBlood(int index)
+        {
+            Rectangle srcrec;
+            Rectangle destrec;
+            int x;
+            int y;
+
+            {
+                ref var withBlock = ref Data.Blood[index];
+                if (withBlock.X < GameState.TileView.Left | withBlock.X > GameState.TileView.Right)
+                    return;
+                if (withBlock.Y < GameState.TileView.Top | withBlock.Y > GameState.TileView.Bottom)
+                    return;
+
+                // check if we should be seeing it
+                if (withBlock.Timer + 20000 < General.GetTickCount())
+                    return;
+
+                x = GameLogic.ConvertMapX(Data.Blood[index].X);
+                y = GameLogic.ConvertMapY(Data.Blood[index].Y);
+
+                srcrec = new Rectangle((withBlock.Sprite - 1) * GameState.SizeX, 0, GameState.SizeX, GameState.SizeY);
+                destrec = new Rectangle(GameLogic.ConvertMapX(withBlock.X),
+                    GameLogic.ConvertMapY(withBlock.Y), GameState.SizeX, GameState.SizeY);
+
+                var argpath = Path.Combine(DataPath.Misc, "Blood");
+                RenderTexture(ref argpath, x, y, srcrec.X, srcrec.Y, srcrec.Width, srcrec.Height);
+            }
+        }
+
+        public static void DrawBars()
+        {
+            long left;
+            long top;
+            long width;
+            long height;
+            long tmpX;
+            long tmpY;
+            var barWidth = default(long);
+            long i;
+            long npcNum;
+
+            // dynamic bar calculations
+            width = GetGfxInfo(Path.Combine(DataPath.Misc, "Bars")).Width;
+            height = (long) Math.Round(GetGfxInfo(Path.Combine(DataPath.Misc, "Bars")).Height / 4d);
+
+            // render Npc health bars
+            for (i = 0L; i < Constant.MaxMapNpcs; i++)
+            {
+                npcNum = (long) Data.MyMapNpc[(int) i].Num;
+                // exists?
+                if (npcNum >= 0L && npcNum <= Constant.MaxNpcs)
+                {
+                    // alive?
+                    if (Data.MyMapNpc[(int) i].Vital[(int) Vital.Health] > 0 &
+                        Data.MyMapNpc[(int) i].Vital[(int) Vital.Health] < Data.Npc[(int) npcNum].Hp)
+                    {
+                        // lock to Npc
+                        tmpX = (long) Math.Round(Data.MyMapNpc[(int) i].X + 16 - width / 2d);
+                        tmpY = Data.MyMapNpc[(int) i].Y + 35;
+
+                        // calculate the width to fill
+                        if (width > 0)
+                            GameState.BarWidthNpcHpMax[(int) i] = (int) Math.Round(
+                                Data.MyMapNpc[(int) i].Vital[(int) Vital.Health] / (double) width /
+                                (Data.Npc[(int) npcNum].Hp / (double) width) * width);
+
+                        // draw bar background
+                        top = height * 3L; // HP bar background
+                        left = 0L;
+                        var argpath = Path.Combine(DataPath.Misc, "Bars");
+                        RenderTexture(ref argpath, GameLogic.ConvertMapX((int) tmpX), GameLogic.ConvertMapY((int) tmpY),
+                            (int) left, (int) top, (int) width, (int) height, (int) width, (int) height);
+
+                        // draw the bar proper
+                        top = 0L; // HP bar
+                        left = 0L;
+                        var argpath1 = Path.Combine(DataPath.Misc, "Bars");
+                        RenderTexture(ref argpath1, GameLogic.ConvertMapX((int) tmpX), GameLogic.ConvertMapY((int) tmpY),
+                            (int) left, (int) top, (int) GameState.BarWidthNpcHp[(int) i], (int) height,
+                            (int) GameState.BarWidthNpcHp[(int) i], (int) height);
+                    }
+                }
+            }
+
+            for (i = 0L; i < Constant.MaxPlayers; i++)
+            {
+                if (GetPlayerMap((int) i) == GetPlayerMap((int) i))
+                {
+                    if (GetPlayerVital((int) i, Vital.Health) > 0 &
+                        GetPlayerVital((int) i, Vital.Health) < GetPlayerMaxVital((int) i, Vital.Health))
+                    {
+                        // lock to Player
+                        tmpX = (long) Math.Round(GetPlayerRawX((int) i) +
+                            16 - width / 2d);
+                        tmpY = GetPlayerRawY((int) i) + 35;
+
+                        // calculate the width to fill
+                        if (width > 0)
+                            GameState.BarWidthPlayerHpMax[(int) i] = (int) Math.Round(
+                                GetPlayerVital((int) i, Vital.Health) / (double) width /
+                                (GetPlayerMaxVital((int) i, Vital.Health) / (double) width) * width);
+
+                        // draw bar background
+                        top = height * 3L; // HP bar background
+                        left = 0L;
+                        var argpath2 = Path.Combine(DataPath.Misc, "Bars");
+                        RenderTexture(ref argpath2, GameLogic.ConvertMapX((int) tmpX), GameLogic.ConvertMapY((int) tmpY),
+                            (int) left, (int) top, (int) width, (int) height, (int) width, (int) height);
+
+                        // draw the bar proper
+                        top = 0L; // HP bar
+                        left = 0L;
+                        var argpath3 = Path.Combine(DataPath.Misc, "Bars");
+                        RenderTexture(ref argpath3, GameLogic.ConvertMapX((int) tmpX), GameLogic.ConvertMapY((int) tmpY),
+                            (int) left, (int) top, (int) GameState.BarWidthPlayerHp[(int) i], (int) height,
+                            (int) GameState.BarWidthPlayerHp[(int) i], (int) height);
+                    }
+
+                    if (GetPlayerVital((int) i, Vital.Stamina) > 0 &
+                        GetPlayerVital((int) i, Vital.Stamina) < GetPlayerMaxVital((int) i, Vital.Stamina))
+                    {
+                        // lock to Player
+                        tmpX = (long)Math.Round(GetPlayerRawX((int)i) +
+                            16 - width / 2d);
+                        tmpY = GetPlayerRawY((int)i) + 35 + height;
+
+                        // calculate the width to fill
+                        if (width > 0)
+                            GameState.BarWidthPlayerSpMax[(int) i] = (int) Math.Round(
+                                GetPlayerVital((int) i, Vital.Stamina) / (double) width /
+                                (GetPlayerMaxVital((int) i, Vital.Stamina) / (double) width) * width);
+
+                        // draw bar background
+                        top = height * 3L; // SP bar background
+                        left = 0L;
+                        var argpath4 = Path.Combine(DataPath.Misc, "Bars");
+                        RenderTexture(ref argpath4, GameLogic.ConvertMapX((int) tmpX), GameLogic.ConvertMapY((int) tmpY),
+                            (int) left, (int) top, (int) width, (int) height, (int) width, (int) height);
+
+                        // draw the bar proper
+                        top = height * 0L; // SP bar
+                        left = 0L;
+                        var argpath5 = Path.Combine(DataPath.Misc, "Bars");
+                        RenderTexture(ref argpath5, GameLogic.ConvertMapX((int) tmpX), GameLogic.ConvertMapY((int) tmpY),
+                            (int) left, (int) top, (int) GameState.BarWidthPlayerSp[(int) i], (int) height,
+                            (int) GameState.BarWidthPlayerSp[(int) i], (int) height);
+                    }
+
+                    if (GameState.SkillBuffer >= 0)
+                    {
+                        if ((int) Data.Player[(int) i].Skill[GameState.SkillBuffer].Num >= 0)
+                        {
+                            if (Data.Skill[(int) Data.Player[(int) i].Skill[GameState.SkillBuffer].Num]
+                                    .CastTime >
+                                0)
+                            {
+                                // lock to player
+                                tmpX = (long)Math.Round(GetPlayerRawX((int)i) + 16 - width / 2d);
+
+                                tmpY = GetPlayerRawY((int)i) + 35 + height;
+
+                                // calculate the width to fill
+                                if (width > 0L)
+                                    barWidth = (long) Math.Round((General.GetTickCount() - GameState.SkillBufferTimer) /
+                                        (double) (Data
+                                            .Skill[(int) Data.Player[(int) i].Skill[GameState.SkillBuffer].Num]
+                                            .CastTime * 1000) * width);
+
+                                // draw bar background
+                                top = height * 3L; // cooldown bar background
+                                left = 0L;
+                                var argpath6 = Path.Combine(DataPath.Misc, "Bars");
+                                RenderTexture(ref argpath6, GameLogic.ConvertMapX((int) tmpX),
+                                    GameLogic.ConvertMapY((int) tmpY), (int) left, (int) top, (int) width, (int) height,
+                                    (int) width, (int) height);
+
+                                // draw the bar proper
+                                top = height * 2L; // cooldown bar
+                                left = 0L;
+                                var argpath7 = Path.Combine(DataPath.Misc, "Bars");
+                                RenderTexture(ref argpath7, GameLogic.ConvertMapX((int) tmpX),
+                                    GameLogic.ConvertMapY((int) tmpY), (int) left, (int) top, (int) barWidth, (int) height,
+                                    (int) barWidth, (int) height);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        internal void DrawEyeDropper()
+        {
+            SpriteBatch.Begin();
+
+            // Define rectangle parameters.
+            var position = new Vector2(GameLogic.ConvertMapX(GameState.CurX), GameLogic.ConvertMapY(GameState.CurY));
+            var size = new Vector2(GameState.SizeX, GameState.SizeX);
+            var fillColor = Color.Transparent; // No fill
+            var outlineColor = Color.Cyan; // Cyan outline
+            var outlineThickness = 1; // Thickness of outline
+
+            // Draw the rectangle with an outline.
+            DrawRectangle(position, size, fillColor, outlineColor, outlineThickness);
+            SpriteBatch.End();
+        }
+
+        public static void DrawGrid()
+        {
+            // Use a single Begin/End pair to improve performance
+            SpriteBatch.Begin();
+
+            // Iterate over the tiles in the visible range
+            for (double x = GameState.TileView.Left - 1d, loopTo = GameState.TileView.Right + 1d; x < loopTo; x++)
+            {
+                for (double y = GameState.TileView.Top - 1d, loopTo1 = GameState.TileView.Bottom + 1d; y < loopTo1; y++)
+                {
+                    if (GameLogic.IsValidMapPoint((int) Math.Round(x), (int) Math.Round(y)))
+                    {
+                        // Calculate the tile position and size
+                        var posX = GameLogic.ConvertMapX((int) Math.Round(x - 1d));
+                        var posY = GameLogic.ConvertMapY((int) Math.Round((y - 1d) * GameState.SizeY));
+                        var rectWidth = GameState.SizeX;
+                        var rectHeight = GameState.SizeY;
+
+                        // Draw the transparent rectangle as the tile background
+                        SpriteBatch.Draw(TransparentTexture, new Rectangle(posX, posY, rectWidth, rectHeight),
+                            Color.Transparent);
+
+                        // Define the outline color and thickness
+                        var outlineColor = Color.White;
+                        var thickness = 1;
+
+                        // Draw the tile outline (top, bottom, left, right)
+                        SpriteBatch.Draw(TransparentTexture, new Rectangle(posX, posY, rectWidth, thickness),
+                            outlineColor); // Top
+                        SpriteBatch.Draw(TransparentTexture,
+                            new Rectangle(posX, posY + rectHeight - thickness, rectWidth, thickness),
+                            outlineColor); // Bottom
+                        SpriteBatch.Draw(TransparentTexture, new Rectangle(posX, posY, thickness, rectHeight),
+                            outlineColor); // Left
+                        SpriteBatch.Draw(TransparentTexture,
+                            new Rectangle(posX + rectWidth - thickness, posY, thickness, rectHeight),
+                            outlineColor); // Right
+                    }
+                }
+            }
+
+            SpriteBatch.End();
+        }
+
+        public static void DrawTarget(int x2, int y2)
+        {
+            Rectangle rec;
+            int x;
+            int y;
+            int width;
+            int height;
+
+            rec.Y = 0;
+            rec.Height = GetGfxInfo(Path.Combine(DataPath.Misc, "Target")).Height;
+            rec.X = 0;
+            rec.Width = (int) Math.Round(GetGfxInfo(Path.Combine(DataPath.Misc, "Target")).Width / 2d);
+            x = GameLogic.ConvertMapX(x2 + 4);
+            y = GameLogic.ConvertMapY(y2 - 32);
+            width = rec.Right - rec.Left;
+            height = rec.Bottom - rec.Top;
+
+            var argpath = Path.Combine(DataPath.Misc, "Target");
+            RenderTexture(ref argpath, x, y, rec.X, rec.Y, rec.Width, rec.Height, rec.Width, rec.Height);
+        }
+
+        public static Color ToMonoGameColor(System.Drawing.Color drawingColor)
+        {
+            return new Color(drawingColor.R, drawingColor.G, drawingColor.B, drawingColor.A);
+        }
+
+        public static void DrawHover(int x2, int y2)
+        {
+            Rectangle rec;
+            int x;
+            int y;
+            int width;
+            int height;
+
+            rec.Y = 0;
+            rec.Height = GetGfxInfo(Path.Combine(DataPath.Misc, "Target")).Height;
+            rec.X = (int) Math.Round(GetGfxInfo(Path.Combine(DataPath.Misc, "Target")).Width / 2d);
+            rec.Width = (int) Math.Round(GetGfxInfo(Path.Combine(DataPath.Misc, "Target")).Width / 2d +
+                                         GetGfxInfo(Path.Combine(DataPath.Misc, "Target")).Width / 2d);
+
+            x = GameLogic.ConvertMapX(x2 + 4);
+            y = GameLogic.ConvertMapY(y2 - 32);
+            width = rec.Right - rec.Left;
+            height = rec.Bottom - rec.Top;
+
+            var argpath = Path.Combine(DataPath.Misc, "Target");
+            RenderTexture(ref argpath, x, y, rec.X, rec.Y, rec.Width, rec.Height, rec.Width, rec.Height);
+        }
+
+        public static void DrawChatBubble(long index)
+        {
+            var theArray = default(string[]);
+            int x;
+            int y;
+            long i;
+            var maxWidth = default(long);
+            long x2;
+            long y2;
+            int color;
+            long tmpNum;
+
+            {
+                ref var withBlock = ref Data.ChatBubble[(int) index];
+
+                // exit out early
+                if (withBlock.TargetType == 0)
+                    return;
+
+                color = withBlock.Color;
+
+                // calculate position
+                switch (withBlock.TargetType)
+                {
+                    case (byte) TargetType.Player:
+                    {
+                        // it's a player
+                        if (!(GetPlayerMap(withBlock.Target) == GetPlayerMap(GameState.MyIndex)))
+                            return;
+
+                        // it's on our map - get co-ords
+                        x = GameLogic.ConvertMapX(Data.Player[withBlock.Target].X) + 16;
+                        y = GameLogic.ConvertMapY(Data.Player[withBlock.Target].Y) - 32;
+                        break;
+                    }
+                    case (byte) TargetType.Event:
+                    {
+                        x = GameLogic.ConvertMapX(Data.MyMap.Event[withBlock.Target].X) + 16;
+                        y = GameLogic.ConvertMapY(Data.MyMap.Event[withBlock.Target].Y) - 16;
+                        break;
+                    }
+
+                    case (byte) TargetType.Npc:
+                    {
+                        x = GameLogic.ConvertMapX(Data.MyMapNpc[withBlock.Target].X) + 16;
+                        y = GameLogic.ConvertMapY(Data.MyMapNpc[withBlock.Target].Y) - 32;
+                        break;
+                    }
+
+                    default:
+                    {
+                        x = 0;
+                        y = 0;
+                        return;
+                    }
+                }
+
+                withBlock.Msg = withBlock.Msg.Replace("\0", string.Empty);
+
+                // word wrap
+                TextRenderer.WordWrap(withBlock.Msg, Font.Georgia, GameState.ChatBubbleWidth, ref theArray);
+
+                // find max width
+                tmpNum = Information.UBound(theArray);
+
+                var loopTo = tmpNum;
+                for (i = 0L; i <= loopTo; i++)
+                {
+                    if (TextRenderer.GetTextWidth(theArray[(int) i], Font.Georgia) > maxWidth)
+                        maxWidth = TextRenderer.GetTextWidth(theArray[(int) i], Font.Georgia);
+                }
+
+                // calculate the new position 
+                x2 = x - maxWidth / 2L;
+                y2 = y - (Information.UBound(theArray) + 1) * 12;
+
+                // render bubble - top left
+                var argpath = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath, (int) (x2 - 9L), (int) (y2 - 5L), 0, 0, 9, 5, 9, 5);
+
+                // top right
+                var argpath1 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath1, (int) (x2 + maxWidth), (int) (y2 - 5L), 119, 0, 9, 5, 9, 5);
+
+                // top
+                var argpath2 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath2, (int) x2, (int) (y2 - 5L), 9, 0, (int) maxWidth, 5, 5, 5);
+
+                // bottom left
+                var argpath3 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath3, (int) (x2 - 9L), (int) y, 0, 19, 9, 6, 9, 6);
+
+                // bottom right
+                var argpath4 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath4, (int) (x2 + maxWidth), (int) y, 119, 19, 9, 6, 9, 6);
+
+                // bottom - left half
+                var argpath5 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath5, (int) x2, (int) y, 9, 19, (int) (maxWidth / 2L - 5L), 6, 6, 6);
+
+                // bottom - right half
+                var argpath6 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath6, (int) (x2 + maxWidth / 2L + 6L), (int) y, 9, 19, (int) (maxWidth / 2L - 5L), 6,
+                    9,
+                    6);
+
+                // left
+                var argpath7 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath7, (int) (x2 - 9L), (int) y2, 0, 6, 9, (Information.UBound(theArray) + 1) * 12, 9, 6);
+
+                // right
+                var argpath8 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath8, (int) (x2 + maxWidth), (int) y2, 119, 6, 9, (Information.UBound(theArray) + 1) * 12,
+                    9,
+                    6);
+
+                // center
+                var argpath9 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath9, (int) x2, (int) y2, 9, 5, (int) maxWidth, (Information.UBound(theArray) + 1) * 12, 9,
+                    5);
+
+                // little pointy bit
+                var argpath10 = Path.Combine(DataPath.Gui, 33.ToString());
+                RenderTexture(ref argpath10, (int) (x - 5L), (int) y, 58, 19, 11, 11, 11, 11);
+
+                // render each line centralized
+                tmpNum = Information.UBound(theArray);
+
+                var loopTo1 = tmpNum;
+                for (i = 0; i <= loopTo1; i++)
+                {
+                    if (theArray[(int) i] == null)
+                        continue;
+
+                    // Measure button text size and apply padding
+                    var textSize = TextRenderer.Fonts[Font.Georgia].MeasureString(theArray[(int) i]);
+                    var actualWidth = textSize.X;
+                    var actualHeight = textSize.Y;
+
+                    // Calculate horizontal and vertical centers with padding
+                    var padding = (double) actualWidth / 6.0d;
+
+                    TextRenderer.RenderText(theArray[(int) i],
+                        (int) Math.Round(x - theArray[(int) i].Length / 2d - TextRenderer.GetTextWidth(theArray[(int) i]) / 2d +
+                                         padding), (int) y2, QbColorToXnaColor(withBlock.Color),
+                        Color.Black);
+                    y2 = y2 + 12L;
+                }
+
+                // check if it's timed out - close it if so
+                if (withBlock.Timer + 5000 < General.GetTickCount())
+                {
+                    withBlock.Active = false;
+                }
+            }
+        }
+
+        public static void DrawPlayer(int index)
+        {
+            byte anim;
+            int x;
+            int y;
+            int spriteNum;
+            var spriteleft = default(int);
+            int attackSpeed;
+            Rectangle rect;
+
+            spriteNum = GetPlayerSprite(index);
+
+            if (index < 0 | index > Constant.MaxPlayers)
+                return;
+
+            if (spriteNum <= 0 | spriteNum > GameState.NumCharacters)
+                return;
+
+            // speed from weapon
+            if (GetPlayerEquipment(index, Equipment.Weapon) >= 0)
+            {
+                attackSpeed = Data.Item[GetPlayerEquipment(index, Equipment.Weapon)].Speed;
+            }
+            else
+            {
+                attackSpeed = 1000;
+            }
+
+            // Reset frame
+            anim = 0;
+
+            // Check for attacking animation
+            if (Data.Player[index].AttackTimer + attackSpeed / 2d > General.GetTickCount())
+            {
+                if (Data.Player[index].Attacking == 1)
+                {
+                    anim = 3;
+                }
+            }
+            else
+            {
+                anim = Data.Player[index].Steps;
+            }
+
+            // Check to see if we want to stop making him attack
+            {
+                ref var withBlock = ref Data.Player[index];
+                if (withBlock.AttackTimer + attackSpeed < General.GetTickCount())
+                {
+                    withBlock.Attacking = 0;
+                    withBlock.AttackTimer = 0;
+                }
+            }
+
+            // Set the left
+            switch (GetPlayerDir(index))
+            {
+                case (int) Direction.Up:
+                {
+                    spriteleft = 3;
+                    break;
+                }
+                case (int) Direction.Right:
+                {
+                    spriteleft = 2;
+                    break;
+                }
+                case (int) Direction.Down:
+                {
+                    spriteleft = 0;
+                    break;
+                }
+                case (int) Direction.Left:
+                {
+                    spriteleft = 1;
+                    break;
+                }
+                case (int) Direction.UpRight:
+                {
+                    spriteleft = 2;
+                    break;
+                }
+                case (int) Direction.UpLeft:
+                {
+                    spriteleft = 1;
+                    break;
+                }
+                case (int) Direction.DownLeft:
+                {
+                    spriteleft = 1;
+                    break;
+                }
+                case (int) Direction.DownRight:
+                {
+                    spriteleft = 2;
+                    break;
+                }
+            }
+
+            var gfxInfo = GetGfxInfo(Path.Combine(DataPath.Characters, spriteNum.ToString()));
+            if (gfxInfo == null)
+            {
+                // Handle the case where the graphic information is not found
+                return;
+            }
+
+            // Calculate the X
+            x = (int) Math.Round(Data.Player[index].X - (gfxInfo.Width / 4d - 32d) / 2d);
+
+            // Is the player's height more than 32..?
+            if (gfxInfo.Height / 4 > 32)
+            {
+                // Create a 32 pixel offset for larger sprites
+                y = (int) Math.Round(GetPlayerRawY(index) - (gfxInfo.Height / 4d - 32d));
+            }
+            else
+            {
+                // Proceed as normal
+                y = GetPlayerRawY(index);
+            }
+
+            rect = new Rectangle((int) Math.Round(anim * (gfxInfo.Width / 4d)),
+                (int) Math.Round(spriteleft * (gfxInfo.Height / 4d)), (int) Math.Round(gfxInfo.Width / 4d),
+                (int) Math.Round(gfxInfo.Height / 4d));
+
+            // render the actual sprite
+            // DrawShadow(x, y + 16)
+            DrawCharacterSprite(spriteNum, x, y, rect);
+
+            // check for paperdolling with directional draw order rules
+            // Rule: draw weapon first when facing up (behind), draw weapon last when facing down (in front)
+            var dirVal = (Direction) GetPlayerDir(index);
+            var eqOrder = new[] { Equipment.Weapon, Equipment.Armor, Equipment.Helmet, Equipment.Shield };
+
+            // Treat diagonals as their vertical tendency
+            var isUp = dirVal == Direction.Up || dirVal == Direction.UpLeft || dirVal == Direction.UpRight;
+            var isDown = dirVal == Direction.Down || dirVal == Direction.DownLeft || dirVal == Direction.DownRight;
+
+            if (isDown)
+            {
+                // Move weapon to the end so it draws on top
+                eqOrder = new[] { Equipment.Armor, Equipment.Helmet, Equipment.Shield, Equipment.Weapon };
+            }
+            else if (isUp)
+            {
+                // Ensure weapon is first so it draws behind
+                eqOrder = new[] { Equipment.Weapon, Equipment.Armor, Equipment.Helmet, Equipment.Shield };
+            }
+
+            foreach (var eq in eqOrder)
+            {
+                if (GetPlayerEquipment(index, eq) >= 0)
+                {
+                    var itemIndex = GetPlayerEquipment(index, eq);
+                    var paperId = Data.Item[itemIndex].Paperdoll;
+                    if (paperId > 0)
+                    {
+                        DrawPaperdoll(x, y, paperId, anim, spriteleft);
+                    }
+                }
+            }
+
+            // Check to see if we want to stop showing emote
+            {
+                ref var withBlock1 = ref Data.Player[index];
+                if (withBlock1.EmoteTimer < General.GetTickCount())
+                {
+                    withBlock1.Emote = 0;
+                    withBlock1.EmoteTimer = 0;
+                }
+            }
+
+            // check for emotes
+            if (Data.Player[GameState.MyIndex].Emote > 0)
+            {
+                DrawEmote(x, y, Data.Player[GameState.MyIndex].Emote);
+            }
+        }
+
+        public static void DrawEvents()
+        {
+            if (Data.MyMap.Event == null)
+                return;
+
+            for (int i = 0, loopTo = Information.UBound(Data.MyMap.Event); i < loopTo; i++)
+            {
+                var x = GameLogic.ConvertMapX(Data.MyMap.Event[i].X);
+                var y = GameLogic.ConvertMapY(Data.MyMap.Event[i].Y);
+
+                // Skip event if there are no pages
+                if (Data.MyMap.Event[i].PageCount <= 0)
+                {
+                    DrawOutlineRectangle(x, y, GameState.SizeX, GameState.SizeY, Color.Blue, 0.6f);
+                    continue;
+                }
+
+                // Render event based on its graphic type
+                switch (Data.MyMap.Event[i].Pages[0].GraphicType)
+                {
+                    case 0: // Text Event
+                    {
+                        var tX = x * GameState.SizeX;
+                        var tY = y * GameState.SizeY;
+                        TextRenderer.RenderText("E", tX, tY, Color.Green, Color.Black);
+                        break;
+                    }
+
+                    case 1: // Character Graphic
+                    {
+                        RenderCharacterGraphic(Data.MyMap.Event[i], x * GameState.SizeX, y * GameState.SizeY);
+                        break;
+                    }
+
+                    case 2: // Tileset Graphic
+                    {
+                        RenderTilesetGraphic(Data.MyMap.Event[i], x, y);
+                        break;
+                    }
+
+                    default:
+                    {
+                        // Draw fallback outline rectangle if graphic type is unknown
+                        DrawOutlineRectangle(x, y, GameState.SizeX, GameState.SizeY, Color.Blue, 0.6f);
+                        break;
+                    }
+                }
+            }
+        }
+
+        public static void RenderCharacterGraphic(Type.Event eventData, int x, int y)
+        {
+            // Get the graphic index from the event's first page
+            var gfxIndex = eventData.Pages[0].Graphic;
+
+            // Validate the graphic index to ensure it�s within range
+            if (gfxIndex <= 0 || gfxIndex > GameState.NumCharacters)
+                return;
+
+            // Get animation details (frame index and columns) from the event
+            var frameIndex = eventData.Pages[0].GraphicX; // Example frame index
+            var columns = 4;
+            var gfxInfo = GetGfxInfo(Path.Combine(DataPath.Characters, gfxIndex.ToString()));
+            if (gfxInfo == null)
+            {
+                // Handle the case where the graphic information is not found
+                return;
+            }
+
+            // Calculate the frame size (assuming square frames for simplicity)
+            var frameWidth = gfxInfo.Width / columns;
+            var frameHeight = frameWidth; // Adjust if non-square frames
+
+            // Calculate the source rectangle for the current frame
+            var column = frameIndex % columns;
+            var row = frameIndex / columns;
+            var sourceRect = new Rectangle(column * frameWidth, row * frameHeight, frameWidth, frameHeight);
+
+            // Define the position on the map where the graphic will be drawn
+            var position = new Vector2(x, y);
+
+            var argpath = Path.Combine(DataPath.Characters, gfxIndex.ToString());
+            RenderTexture(ref argpath, (int) Math.Round(position.X), (int) Math.Round(position.Y), sourceRect.X,
+                sourceRect.Y,
+                frameWidth, frameHeight, sourceRect.Width, sourceRect.Height);
+        }
+
+        private static void RenderTilesetGraphic(Type.Event eventData, int x, int y)
+        {
+            var gfxIndex = eventData.Pages[0].Graphic;
+
+            if (gfxIndex > 0 && gfxIndex <= GameState.NumTileSets)
+            {
+                // Define source rectangle from tileset graphics
+                var srcRect = new Rectangle(eventData.Pages[0].GraphicX * 32, eventData.Pages[0].GraphicY * 32,
+                    eventData.Pages[0].GraphicX2 * 32, eventData.Pages[0].GraphicY2 * 32);
+
+                // Adjust position if the tile is larger than 32x32
+                if (srcRect.Height > 32)
+                    y -= GameState.SizeY;
+
+                // Define destination rectangle
+                var destRect = new Rectangle(x, y, srcRect.Width, srcRect.Height);
+
+                var argpath = Path.Combine(DataPath.Tilesets, gfxIndex.ToString());
+                RenderTexture(ref argpath, destRect.X, destRect.Y, srcRect.X, srcRect.Y, destRect.Width,
+                    destRect.Height,
+                    srcRect.Width, srcRect.Height);
+            }
+            else
+            {
+                // Draw fallback outline if the tileset graphic is invalid
+                DrawOutlineRectangle(x, y, GameState.SizeX, GameState.SizeY, Color.Blue, 0.6f);
+            }
+        }
+
+        public static void DrawEvent(int id) // draw on map, outside the editor
+        {
+            int x;
+            int y;
+            int width;
+            int height;
+            var sRect = default(Rectangle);
+            var anim = default(int);
+            var spritetop = default(int);
+
+            try
+            {
+                if (!Data.MapEvents[id].Visible)
+                {
+                    return;
+                }
+
+                switch (Data.MapEvents[id].GraphicType)
+                {
+                    case 0:
+                    {
+                        return;
+                    }
+                    case 1:
+                    {
+                        if (Data.MapEvents[id].Graphic <= 0 |
+                            Data.MapEvents[id].Graphic > GameState.NumCharacters)
+                            return;
+
+                        anim = Data.MapEvents[id].Steps;
+
+                        // Set the left
+                        switch (Data.MapEvents[id].ShowDir)
+                        {
+                            case (int) Direction.Up:
+                            {
+                                spritetop = 3;
+                                break;
+                            }
+                            case (int) Direction.Right:
+                            {
+                                spritetop = 2;
+                                break;
+                            }
+                            case (int) Direction.Down:
+                            {
+                                spritetop = 0;
+                                break;
+                            }
+                            case (int) Direction.Left:
+                            {
+                                spritetop = 1;
+                                break;
+                            }
+                        }
+
+                        var gfxInfo = GetGfxInfo(Path.Combine(DataPath.Characters,
+                            Data.MapEvents[id].Graphic.ToString()));
+
+                        if (gfxInfo == null)
+                        {
+                            // Handle the case where gfxInfo is null
+                            return;
+                        }
+
+                        height = (int) Math.Round((double) gfxInfo.Height / 4d);
+                        width = (int) Math.Round((double) gfxInfo.Width / 4d);
+                        sRect = new Rectangle((int) Math.Round((double) anim * width),
+                            (int) Math.Round((double) spritetop * height), width, height);
+
+                        // Calculate the X
+                        x = (int) Math.Round(Data.MapEvents[id].X -
+                                             (width - 32d) / 2d);
+
+                        // Is the player's height more than 32..?
+                        if (gfxInfo.Height / 4 > 32)
+                        {
+                            // Create a 32 pixel offset for larger sprites
+                            y = (int) Math.Round(Data.MapEvents[id].Y - (height - 32d));
+                        }
+                        else
+                        {
+                            // Proceed as normal
+                            y = Data.MapEvents[id].Y;
+                        }
+
+                        // render the actual sprite
+                        DrawCharacterSprite(Data.MapEvents[id].Graphic, x, y, sRect);
+                        break;
+                    }
+                    case 2:
+                    {
+                        if (Data.MapEvents[id].Graphic < 1 |
+                            Data.MapEvents[id].Graphic > GameState.NumTileSets)
+                            return;
+
+                        if (Data.MapEvents[id].GraphicY2 > 0 | Data.MapEvents[id].GraphicX2 > 0)
+                        {
+                            sRect.X = Data.MapEvents[id].GraphicX * 32;
+                            sRect.Y = Data.MapEvents[id].GraphicY * 32;
+                            sRect.Width = Data.MapEvents[id].GraphicX2 * 32;
+                            sRect.Height = Data.MapEvents[id].GraphicY2 * 32;
+                        }
+                        else
+                        {
+                            sRect.X = Data.MapEvents[id].GraphicY * 32;
+                            sRect.Height = sRect.Top + 32;
+                            sRect.Y = Data.MapEvents[id].GraphicX * 32;
+                            sRect.Width = sRect.Left + 32;
+                        }
+
+                        x = Data.MapEvents[id].X * 32;
+                        y = Data.MapEvents[id].Y * 32;
+                        x = (int) Math.Round(x - (sRect.Right - sRect.Left) / 2d);
+                        y = y - (sRect.Bottom - sRect.Top) + 32;
+
+                        if (Data.MapEvents[id].GraphicY2 > 1)
+                        {
+                            var argpath = Path.Combine(DataPath.Tilesets,
+                                Data.MapEvents[id].Graphic.ToString());
+                            RenderTexture(ref argpath,
+                                GameLogic.ConvertMapX(Data.MapEvents[id].X),
+                                GameLogic.ConvertMapY(Data.MapEvents[id].Y) - GameState.SizeY,
+                                sRect.Left, sRect.Top, sRect.Width, sRect.Height);
+                        }
+                        else
+                        {
+                            var argpath1 = Path.Combine(DataPath.Tilesets,
+                                Data.MapEvents[id].Graphic.ToString());
+                            RenderTexture(ref argpath1,
+                                GameLogic.ConvertMapX(Data.MapEvents[id].X),
+                                GameLogic.ConvertMapY(Data.MapEvents[id].Y), sRect.Left,
+                                sRect.Top,
+                                sRect.Width, sRect.Height);
+                        }
+
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        public static void Render_Game()
+        {
+            int x;
+            int y;
+            int i;
+
+            if (GameState.GettingMap)
+                return;
+
+            GameLogic.UpdateCamera();
+
+            if (GameState.NumPanoramas > 0 & Data.MyMap.Panorama > 0)
+            {
+                Map.DrawPanorama(Data.MyMap.Panorama);
+            }
+
+            if (GameState.NumParallax > 0 & Data.MyMap.Parallax > 0)
+            {
+                Map.DrawParallax(Data.MyMap.Parallax);
+            }
+
+            // Draw lower tiles
+            if (GameState.NumTileSets > 0)
+            {
+                var loopTo = (int) Math.Round(GameState.TileView.Right + 1d);
+                for (x = (int) Math.Round(GameState.TileView.Left - 1d); x < loopTo; x++)
+                {
+                    var loopTo1 = (int) Math.Round(GameState.TileView.Bottom + 1d);
+                    for (y = (int) Math.Round(GameState.TileView.Top - 1d); y < loopTo1; y++)
+                    {
+                        if (GameLogic.IsValidMapPoint(x, y))
+                        {
+                            Map.DrawMapGroundTile(x, y);
+                        }
+                    }
+                }
+            }
+
+            // events
+            if (GameState.MyEditorType != EditorType.Map)
+            {
+                if (GameState.CurrentEvents > 0 & GameState.CurrentEvents <= Data.MyMap.EventCount)
+                {
+                    var loopTo2 = Information.UBound(Data.MapEvents);
+                    for (i = 0; i <= loopTo2; i++)
+                    {
+                        if (Data.MapEvents[i].Position == 0)
+                        {
+                            DrawEvent(i);
+                        }
+                    }
+                }
+            }
+
+            // blood
+            for (i = 0; i < byte.MaxValue; i++)
+                DrawBlood(i);
+
+            // Draw out the items
+            if (GameState.NumItems > 0)
+            {
+                for (i = 0; i < Constant.MaxMapItems; i++)
+                {
+                    DrawMapItem(i);
+                }
+            }
+
+            // draw animations
+            if (GameState.NumAnimations > 0)
+            {
+                for (i = 0; i < byte.MaxValue; i++)
+                {
+                    if (Animation.AnimInstance[i].Used[0])
+                    {
+                        Animation.Draw(i, 0);
+                    }                
+                }
+            }
+
+            // Y-based render. Renders Players, Npcs and Resources based on Y-axis.
+            var loopTo3 = (int) Data.MyMap.MaxY;
+            for (y = 0; y < loopTo3; y++)
+            {
+                if (GameState.NumCharacters > 0)
+                {
+                    // Npcs
+                    for (i = 0; i < Constant.MaxMapNpcs; i++)
+                    {
+                        if (Math.Floor((decimal) Data.MyMapNpc[i].Y / 32) == y)
+                        {
+                            DrawNpc(i);
+                        }
+                    }
+
+                    // Players
+                    for (i = 0; i < Constant.MaxPlayers; i++)
+                    {
+                        if (IsPlaying(i) & GetPlayerMap(i) == GetPlayerMap(GameState.MyIndex))
+                        {
+                            if (GetPlayerY(i) == y)
+                            {
+                                DrawPlayer(i);
+                            }
+                        }
+                    }
+
+                    if (GameState.MyEditorType != EditorType.Map)
+                    {
+                        if (GameState.CurrentEvents > 0 & GameState.CurrentEvents <= Data.MyMap.EventCount)
+                        {
+                            var loopTo4 = Information.UBound(Data.MapEvents);
+                            for (i = 0; i <= loopTo4; i++)
+                            {
+                                if (Data.MapEvents[i].Position == 1)
+                                {
+                                    if (Math.Floor((decimal) Data.MapEvents[i].Y / 32) == y)
+                                    {
+                                        DrawEvent(i);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Draw the target icon
+                    if (GameState.MyTarget >= 0)
+                    {
+                        switch (GameState.MyTargetType)
+                        {
+                            case (int) TargetType.Player:
+                                if (IsPlaying(GameState.MyTarget))
+                                {
+                                    if (Data.Player[GameState.MyTarget].Map ==
+                                        Data.Player[GameState.MyIndex].Map)
+                                    {
+                                        if (Data.Player[GameState.MyTarget].Sprite > 0)
+                                        {
+                                            // Draw the target icon for the player
+                                            DrawTarget(
+                                                Data.Player[GameState.MyTarget].X - 16,
+                                                Data.Player[GameState.MyTarget].Y);
+                                        }
+                                    }
+                                }
+
+                                break;
+
+                            case (int) TargetType.Npc:
+                                DrawTarget(
+                                    Data.MyMapNpc[GameState.MyTarget].X - 16,
+                                    Data.MyMapNpc[GameState.MyTarget].Y);
+                                break;
+                        }
+                    }
+
+                    for (i = 0; i < Constant.MaxPlayers; i++)
+                    {
+                        if (IsPlaying(i))
+                        {
+                            if (Data.Player[i].Map == Data.Player[GameState.MyIndex].Map)
+                            {
+                                if (Data.Player[i].Sprite == 0)
+                                    continue;
+
+                                if (GameState.CurX == Data.Player[i].X & GameState.CurY == Data.Player[i].Y)
+                                {
+                                    if (GameState.MyTargetType == (int) TargetType.Player & GameState.MyTarget == i)
+                                    {
+                                    }
+
+                                    else
+                                    {
+                                        DrawHover(Data.Player[i].X * 32 - 16,
+                                            Data.Player[i].Y * 32 + Data.Player[i].Y);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Resources
+                if (GameState.NumResources > 0)
+                {
+                    if (GameState.ResourcesInit)
+                    {
+                        if (GameState.ResourceIndex > 0)
+                        {
+                            var loopTo5 = GameState.ResourceIndex;
+                            for (i = 0; i < loopTo5; i++)
+                            {
+                                if (Data.MyMapResource[i].Y == y)
+                                {
+                                    MapResource.DrawMapResource(i);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // animations
+            if (GameState.NumAnimations > 0)
+            {
+                for (i = 0; i < byte.MaxValue; i++)
+                {
+                    if (Animation.AnimInstance[i].Used[1])
+                        {
+                            Animation.Draw(i, 1);
+                        }
+                    }              
+            }
+
+            if (GameState.NumProjectiles > 0)
+            {
+                for (i = 0; i < Constant.MaxProjectiles; i++)
+                {
+                    if (Data.MapProjectile[Data.Player[GameState.MyIndex].Map, i].ProjectileNum >= 0)
+                    {
+                        Projectile.DrawProjectile(i);
+                    }
+                }
+            }
+
+            if (GameState.CurrentEvents > 0 & GameState.CurrentEvents <= Data.MyMap.EventCount)
+            {
+                var loopTo6 = GameState.CurrentEvents;
+                for (i = 0; i < loopTo6; i++)
+                {
+                    if (Data.MapEvents[i].Position == 2)
+                    {
+                        DrawEvent(i);
+                    }
+                }
+            }
+
+            if (GameState.NumTileSets > 0)
+            {
+                var loopTo7 = (int) Math.Round(GameState.TileView.Right + 1d);
+                for (x = (int) Math.Round(GameState.TileView.Left - 1d); x < loopTo7; x++)
+                {
+                    var loopTo8 = (int) Math.Round(GameState.TileView.Bottom + 1d);
+                    for (y = (int) Math.Round(GameState.TileView.Top - 1d); y < loopTo8; y++)
+                    {
+                        if (GameLogic.IsValidMapPoint(x, y))
+                        {
+                            Map.DrawMapRoofTile(x, y);
+                        }
+                    }
+                }
+            }
+
+            Map.DrawWeather();
+            Map.DrawThunderEffect();
+            Map.DrawMapTint();
+
+            // Draw out a square at mouse cursor
+            if (Conversions.ToInteger(GameState.MapGrid) == 1 & GameState.MyEditorType == EditorType.Map)
+            {
+                DrawGrid();
+            }
+
+            for (i = 0; i < Constant.MaxPlayers; i++)
+            {
+                if (IsPlaying(i) & GetPlayerMap(i) == GetPlayerMap(GameState.MyIndex))
+                {
+                    TextRenderer.DrawPlayerName(i);
+                }
+            }
+
+            if (GameState.MyEditorType != EditorType.Map)
+            {
+                if (GameState.CurrentEvents > 0 && Data.MyMap.EventCount >= GameState.CurrentEvents)
+                {
+                    var loopTo9 = GameState.CurrentEvents;
+                    for (i = 0; i < loopTo9; i++)
+                    {
+                        if (Data.MapEvents[i].Visible)
+                        {
+                            if (Data.MapEvents[i].ShowName == 1)
+                            {
+                                TextRenderer.DrawEventName(i);
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (i = 0; i < Constant.MaxMapNpcs; i++)
+            {
+                TextRenderer.DrawNpcName(i);
+            }
+
+            Map.DrawFog();
+            Map.DrawPicture();
+
+            for (i = 0; i < byte.MaxValue; i++)
+                TextRenderer.DrawActionMsg(i);
+
+            if (GameState.MyEditorType == EditorType.Map)
+            {
+                UpdateDirBlock();
+                UpdateMapAttributes();
+            }
+
+            for (i = 0; i < byte.MaxValue; i++)
+            {
+                if (Data.ChatBubble[i].Active)
+                {
+                    DrawChatBubble(i);
+                }
+            }
+
+            if (GameState.Bfps)
+            {
+                var fps = "FPS: " + GetFps();
+                TextRenderer.RenderText(fps, (int) Math.Round(GameState.Camera.Left - 24d),
+                    (int) Math.Round(GameState.Camera.Top + 60d), Color.Yellow, Color.Black);
+            }
+
+            // draw cursor, player X and Y locations
+            if (GameState.BLoc)
+            {
+                var cur = "Cur X: " + GameState.CurX + " Y: " + GameState.CurY;
+                var loc = "loc X: " + GetPlayerX(GameState.MyIndex) + " Y: " + GetPlayerY(GameState.MyIndex);
+                var map = " (Map #" + GetPlayerMap(GameState.MyIndex) + ")";
+
+                TextRenderer.RenderText(cur, (int) Math.Round(GameState.DrawLocX), (int) Math.Round(GameState.DrawLocY + 105f),
+                    Color.Yellow, Color.Black);
+                TextRenderer.RenderText(loc, (int) Math.Round(GameState.DrawLocX), (int) Math.Round(GameState.DrawLocY + 120f),
+                    Color.Yellow, Color.Black);
+                TextRenderer.RenderText(map, (int) Math.Round(GameState.DrawLocX), (int) Math.Round(GameState.DrawLocY + 135f),
+                    Color.Yellow, Color.Black);
+            }
+
+            TextRenderer.DrawMapName();
+
+            if (GameState.MyEditorType == EditorType.Map)
+            {
+                if (GameState.MapEditorTab == (int) MapEditorTab.Events)
+                {
+                    DrawEvents();
+                }
+            }
+
+            DrawBars();
+            Map.DrawMapFade();
+            Gui.Render();
+            var argpath = Path.Combine(DataPath.Misc, "Cursor");
+            RenderTexture(ref argpath, GameState.CurMouseX, GameState.CurMouseY, 0, 0, 16, 16, 32, 32);
+        }
+
+        public static void Render_Menu()
+        {
+            Gui.DrawMenuBackground();
+            Gui.Render();
+
+            //RenderTexture(ref argpath, GameState.CurMouseX, GameState.CurMouseY, 0, 0, 16, 16, 32, 32);
+        }
+
+        public static void UpdateMapAttributes()
+        {
+            if (GameState.MapEditorTab == (int) MapEditorTab.Attributes)
+            {
+                TextRenderer.DrawMapAttributes();
+            }
+        }
+
+        public static void UpdateDirBlock()
+        {
+            int x;
+            int y;
+
+            if (GameState.MapEditorTab == (int) MapEditorTab.Directions)
+            {
+                var loopTo10 = (int) Math.Round(GameState.TileView.Right + 1d);
+                for (x = (int) Math.Round(GameState.TileView.Left - 1d); x < loopTo10; x++)
+                {
+                    var loopTo11 = (int) Math.Round(GameState.TileView.Bottom + 1d);
+                    for (y = (int) Math.Round(GameState.TileView.Top - 1d); y < loopTo11; y++)
+                    {
+                        if (GameLogic.IsValidMapPoint(x, y))
+                        {
+                            DrawDirections(x, y);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
